@@ -8,11 +8,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env src/server.js",
-    "dev": "node --env-file-if-exists=.env --watch src/server.js",
-    "push": "node --env-file-if-exists=.env scripts/push.js",
-    "tx": "node --env-file-if-exists=.env scripts/tx.js",
-    "test": "node --test"
+    "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env src/server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch src/server.js",
+    "push": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/push.js",
+    "tx": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/tx.js",
+    "test": "node --disable-warning=ExperimentalWarning --test"
   },
   "dependencies": {
     "express": "^5.2.1",

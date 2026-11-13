@@ -104,5 +104,29 @@ export function createPeyClient({ apiKey, baseUrl = 'https://api.pey.mx', fetchI
     async getTransaction(transactionId) {
       return request('GET', `/transaction/${encodeURIComponent(transactionId)}`);
     },
+
+    /**
+     * POST /payment-link/create — liga de pago hospedada por pey (CoDi, tarjeta).
+     * Devuelve { id, url }. Las dos URLs de regreso deben ser HTTPS.
+     */
+    async createPaymentLink({ amount, successUrl, backUrl, clientReferenceId, metadata }) {
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+        throw new PeyError('El monto debe ser mayor a 0', { type: 'INVALID_AMOUNT' });
+      }
+      for (const url of [successUrl, backUrl]) {
+        if (!/^https:\/\//.test(url ?? '')) {
+          throw new PeyError('successUrl y backUrl deben ser direcciones HTTPS', { type: 'INVALID_URL' });
+        }
+      }
+      const body = { amount, successUrl, backUrl };
+      if (clientReferenceId !== undefined) body.clientReferenceId = clientReferenceId;
+      if (metadata !== undefined) body.metadata = metadata;
+      return request('POST', '/payment-link/create', body);
+    },
+
+    /** GET /payment-link/{id} — estado de una liga (pending | processing | paid | partial). */
+    async getPaymentLink(linkId) {
+      return request('GET', `/payment-link/${encodeURIComponent(linkId)}`);
+    },
   };
 }
