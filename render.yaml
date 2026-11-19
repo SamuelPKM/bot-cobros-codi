@@ -1,0 +1,47 @@
+# Blueprint de Render para Cóbrale: https://render.com/docs/blueprint-spec
+#
+# Crea un Web Service siempre encendido (plan Starter) con un disco persistente
+# para la base de datos SQLite. Los secretos no van aquí: Render los pide al
+# aplicar el Blueprint (los que tienen `sync: false`).
+#
+# Guía paso a paso: docs/deploy-render.md
+
+services:
+  - type: web
+    name: cobrale
+    runtime: node
+    # El plan gratis se apaga sin tráfico y no admite discos: con él se
+    # perderían los cobros en cada reinicio.
+    plan: starter
+    # La región no se puede cambiar después de crear el servicio.
+    region: virginia
+    branch: main
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    disk:
+      name: cobrale-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      # --- Secretos: Render los pide al aplicar el Blueprint ---
+      - key: PEY_API_KEY
+        sync: false
+      # Se obtiene al registrar el webhook en portal.pey.mx, después del
+      # primer despliegue. Puede quedar vacío mientras tanto.
+      - key: PEY_WEBHOOK_SECRET
+        sync: false
+
+      # --- Configuración ---
+      - key: DATABASE_FILE
+        value: /var/data/cobros.db
+      - key: DEMO_ENABLED
+        value: "true"
+      - key: DEMO_MAX_AMOUNT
+        value: "1"
+      - key: DEMO_MERCHANT_NAME
+        value: Negocio de prueba
+      - key: TRUST_PROXY
+        value: "true"
+      # PUBLIC_BASE_URL no hace falta: Cóbrale usa RENDER_EXTERNAL_URL, que
+      # Render llena con la URL pública del servicio.

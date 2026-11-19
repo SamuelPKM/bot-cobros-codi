@@ -30,7 +30,7 @@ const bodyText = (req) => (Buffer.isBuffer(req.body) ? req.body.toString('utf8')
  * @param onPaid Se llama con el cobro cuando queda pagado; debe avisar al comerciante.
  */
 export function createApp({
-  peyWebhookSecret,
+  peyWebhookSecret = null,
   pey,
   db,
   onPaid = async () => {},
@@ -40,8 +40,10 @@ export function createApp({
   now = Date.now,
   log = console,
 }) {
-  if (!peyWebhookSecret) throw new Error('createApp: falta peyWebhookSecret');
-  const verifier = new Webhook(peyWebhookSecret);
+  // Sin secreto el servidor arranca igual: el secreto solo existe después de
+  // registrar la URL del webhook en pey, y para eso el servidor ya debe estar
+  // publicado. Mientras tanto el webhook responde 503 y pey lo reintentará.
+  const verifier = peyWebhookSecret ? new Webhook(peyWebhookSecret) : null;
   const app = express();
   app.disable('x-powered-by');
   if (trustProxy) app.set('trust proxy', 1);
@@ -61,6 +63,10 @@ export function createApp({
   // ---------------------------------------------------------------- pey
 
   app.post('/webhooks/pey', rawBody, async (req, res) => {
+    if (!verifier) {
+      log.warn('[pey] llegó un webhook pero falta PEY_WEBHOOK_SECRET: no se puede verificar');
+      return res.status(503).json({ error: 'webhook de pey sin configurar' });
+    }
     let event;
     try {
       event = verifier.verify(bodyText(req), req.headers);

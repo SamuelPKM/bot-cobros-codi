@@ -36,7 +36,8 @@ export function loadConfig({ needWebhookSecret = false } = {}) {
     peyBaseUrl: process.env.PEY_BASE_URL || 'https://api.pey.mx',
     port: Number(process.env.PORT || 3000),
     databaseFile: process.env.DATABASE_FILE || 'data/cobros.db',
-    publicBaseUrl: (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '') || null,
+    // En Render, RENDER_EXTERNAL_URL trae la URL pública del servicio sin configurar nada.
+    publicBaseUrl: (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '') || null,
     trustProxy: process.env.TRUST_PROXY === 'true',
     whatsapp: null,
     demo: null,

@@ -8,7 +8,7 @@ import { createWhatsAppClient } from './whatsapp.js';
 
 const SWEEP_INTERVAL_MS = 30 * 1000;
 
-const config = loadConfig({ needWebhookSecret: true });
+const config = loadConfig();
 const db = openDb(config.databaseFile);
 const pey = createPeyClient({ apiKey: config.peyApiKey, baseUrl: config.peyBaseUrl });
 
@@ -62,7 +62,11 @@ setInterval(async () => {
 
 app.listen(config.port, () => {
   console.log(`Escuchando en http://localhost:${config.port}`);
-  console.log('Webhook de pey:      POST /webhooks/pey');
+  console.log(
+    config.peyWebhookSecret
+      ? 'Webhook de pey:      POST /webhooks/pey'
+      : 'Webhook de pey:      sin configurar (falta PEY_WEBHOOK_SECRET); responde 503 hasta que lo agregues',
+  );
   console.log(
     config.whatsapp
       ? `Webhook de WhatsApp: /webhooks/whatsapp  (${config.whatsapp.merchants.size} comerciante(s) registrados)`

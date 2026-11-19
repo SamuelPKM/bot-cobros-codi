@@ -93,7 +93,9 @@ npm run tx -- <transactionId>
 
 ## Despliegue
 
-En un droplet de DigitalOcean, con HTTPS automático: ver [docs/deploy-digitalocean.md](docs/deploy-digitalocean.md).
+En Render, con el Blueprint de `render.yaml`: ver [docs/deploy-render.md](docs/deploy-render.md).
+
+Como alternativa, en un droplet de DigitalOcean: ver [docs/deploy-digitalocean.md](docs/deploy-digitalocean.md).
 
 ## Demo web pública
 
