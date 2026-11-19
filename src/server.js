@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { createBot } from './bot.js';
 import { loadConfig } from './config.js';
 import { openDb } from './db.js';
+import { createOutbox } from './outbox.js';
 import { createPeyClient } from './pey.js';
 import { createWhatsAppClient } from './whatsapp.js';
 
@@ -11,31 +12,37 @@ const config = loadConfig({ needWebhookSecret: true });
 const db = openDb(config.databaseFile);
 const pey = createPeyClient({ apiKey: config.peyApiKey, baseUrl: config.peyBaseUrl });
 
-// Sin WhatsApp configurado, los avisos solo salen en la terminal.
-const whatsappClient = config.whatsapp
-  ? createWhatsAppClient(config.whatsapp)
-  : { sendText: async (to, body) => console.log(`[sin WhatsApp] para ${to}:\n${body}`) };
+// Las respuestas van a WhatsApp o a la conversación de la demo web, según a quién.
+// Sin WhatsApp configurado, lo que iría a WhatsApp solo sale en la terminal.
+const outbox = createOutbox({ db, whatsapp: config.whatsapp ? createWhatsAppClient(config.whatsapp) : null });
 
 const bot = createBot({
   db,
   pey,
-  whatsapp: whatsappClient,
+  outbox,
   merchants: config.whatsapp?.merchants ?? new Map(),
   publicBaseUrl: config.publicBaseUrl,
+  demo: config.demo,
 });
 
 const app = createApp({
   peyWebhookSecret: config.peyWebhookSecret,
   pey,
   db,
+  trustProxy: config.trustProxy,
   onPaid: async (charge) => {
-    console.log(`PAGADO  $${(charge.amountCents / 100).toFixed(2)} MXN  ${charge.concept ?? ''}  (cobro ${charge.id})`);
+    console.log(`PAGADO  $${(charge.amountCents / 100).toFixed(2)} MXN  ${charge.concept ?? ''}  (cobro ${charge.id}, ${charge.kind})`);
     await bot.notifyPaid(charge);
   },
   whatsapp: config.whatsapp && {
     appSecret: config.whatsapp.appSecret,
     verifyToken: config.whatsapp.verifyToken,
     onMessage: bot.handleMessage,
+  },
+  demo: config.demo && {
+    onMessage: bot.handleMessage,
+    merchantName: config.demo.merchantName,
+    maxAmount: (config.demo.maxAmountCents / 100).toFixed(2),
   },
 });
 
@@ -60,6 +67,11 @@ app.listen(config.port, () => {
     config.whatsapp
       ? `Webhook de WhatsApp: /webhooks/whatsapp  (${config.whatsapp.merchants.size} comerciante(s) registrados)`
       : 'WhatsApp: sin configurar (faltan las variables WHATSAPP_* y MERCHANTS)',
+  );
+  console.log(
+    config.demo
+      ? `Demo web pública:    /demo  (máximo $${(config.demo.maxAmountCents / 100).toFixed(2)} por cobro)`
+      : 'Demo web: desactivada (DEMO_ENABLED=true para activarla)',
   );
   if (!config.publicBaseUrl) console.log('Ligas de pago: desactivadas (falta PUBLIC_BASE_URL)');
 });

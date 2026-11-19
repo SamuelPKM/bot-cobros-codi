@@ -128,5 +128,33 @@ export function createPeyClient({ apiKey, baseUrl = 'https://api.pey.mx', fetchI
     async getPaymentLink(linkId) {
       return request('GET', `/payment-link/${encodeURIComponent(linkId)}`);
     },
+
+    /**
+     * POST /codi/qr — QR CoDi. Devuelve { id (IDC de Banxico), qrString, qrImage }.
+     * Ojo: expiration 0 significa que el QR no expira y puede recibir varios
+     * pagos, así que aquí se exige una expiración de al menos 360 segundos.
+     */
+    async createQr({ amount, concept, expiration, numRef, metadata, generateImage = false }) {
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
+        throw new PeyError('El monto debe ser mayor a 0 y máximo 1,000,000', { type: 'INVALID_AMOUNT' });
+      }
+      if (!Number.isInteger(expiration) || expiration < MIN_EXPIRATION_SECONDS) {
+        throw new PeyError(`La expiración mínima es de ${MIN_EXPIRATION_SECONDS} segundos`, { type: 'INVALID_PARAMETER' });
+      }
+      if (numRef !== undefined && !/^[0-9]{1,7}$/.test(numRef)) {
+        throw new PeyError('numRef debe ser un texto de 1 a 7 dígitos', { type: 'INVALID_PARAMETER' });
+      }
+      const body = { amount, expiration, generateImage };
+      if (concept !== undefined) body.concept = concept;
+      if (numRef !== undefined) body.numRef = numRef;
+      if (metadata !== undefined) body.metadata = metadata;
+      return request('POST', '/codi/qr', body);
+    },
+
+    /** GET /transaction/codi/qr/{id} — pagos recibidos por un QR (la primera página basta: 20). */
+    async listQrTransactions(qrId) {
+      const page = await request('GET', `/transaction/codi/qr/${encodeURIComponent(qrId)}`);
+      return page.items ?? [];
+    },
   };
 }

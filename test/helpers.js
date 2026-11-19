@@ -18,6 +18,8 @@ export function fakePey() {
   const pey = {
     pushes: [],
     links: [],
+    qrs: [],
+    qrCodes: new Map(),
     transactions: new Map(),
     paymentLinks: new Map(),
     fail: null,
@@ -68,6 +70,46 @@ export function fakePey() {
       return { id, url: `https://app.mipey.mx/payment-link/${id}` };
     },
 
+    async createQr(input) {
+      pey.qrs.push(input);
+      if (pey.fail) {
+        const error = pey.fail;
+        pey.fail = null;
+        throw error;
+      }
+      const id = `IDC${pey.qrs.length}`;
+      pey.qrCodes.set(id, { id, amount: input.amount, metadata: { ...input.metadata }, transactions: [] });
+      return { id, qrString: `{"TYP":1,"v":"01","ic":0,"IDC":"${id}"}`, qrImage: null };
+    },
+
+    async listQrTransactions(id) {
+      if (pey.fail) {
+        const error = pey.fail;
+        pey.fail = null;
+        throw error;
+      }
+      const qr = pey.qrCodes.get(id);
+      if (!qr) throw new PeyError('not found', { status: 404, type: 'NOT_FOUND' });
+      return qr.transactions;
+    },
+
+    /** Simula que el cliente escaneó y pagó el QR. Devuelve el transactionId. */
+    payQr(qrId, { trackingKey = 'RASTREOQR' } = {}) {
+      const qr = pey.qrCodes.get(qrId);
+      const transactionId = `TXQ-${qrId}-${qr.transactions.length + 1}`;
+      const tx = {
+        id: transactionId,
+        status: 'PAID',
+        amount: qr.amount,
+        amountBreakdown: { base: qr.amount },
+        datePaid: 1790725000,
+        metadata: { trackingKey, externalMetadata: { ...qr.metadata } },
+      };
+      qr.transactions.push(tx);
+      pey.transactions.set(transactionId, tx);
+      return transactionId;
+    },
+
     async getPaymentLink(id) {
       const link = pey.paymentLinks.get(id);
       if (!link) throw new PeyError('not found', { status: 404, type: 'NOT_FOUND' });
@@ -111,6 +153,13 @@ export function fakeWhatsApp() {
         throw new Error('WhatsApp caído');
       }
       whatsapp.sent.push({ to, body });
+    },
+    async sendImage(to, { png, caption }) {
+      if (whatsapp.fail) {
+        whatsapp.fail = false;
+        throw new Error('WhatsApp caído');
+      }
+      whatsapp.sent.push({ to, body: caption, png });
     },
     last() {
       return whatsapp.sent.at(-1)?.body;

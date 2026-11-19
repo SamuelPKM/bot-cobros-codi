@@ -9,9 +9,18 @@ export function phone(tenDigits) {
   return `${tenDigits.slice(0, 2)} ${tenDigits.slice(2, 6)} ${tenDigits.slice(6)}`;
 }
 
+/** "$150.00 por "corte"": para textos que ya dicen si es QR o liga. */
+function amountAndConcept(charge) {
+  return `${money(charge.amountCents)}${charge.concept ? ` por "${charge.concept}"` : ''}`;
+}
+
 function describe(charge) {
   const concept = charge.concept ? ` por "${charge.concept}"` : '';
-  return `${money(charge.amountCents)} al ${phone(charge.payerPhone)}${concept}`;
+  let target = '';
+  if (charge.payerPhone) target = ` al ${phone(charge.payerPhone)}`;
+  else if (charge.kind === 'qr') target = ' con QR';
+  else if (charge.kind === 'link') target = ' con liga de pago';
+  return `${money(charge.amountCents)}${target}${concept}`;
 }
 
 /**
@@ -28,6 +37,12 @@ export const HELP = [
   '',
   '*cobra 150 a 5512345678 corte de pelo*',
   'Manda un cobro CoDi al celular de tu cliente.',
+  '',
+  '*liga 150 corte de pelo*',
+  'Te doy una liga de pago para que se la mandes a tu cliente por donde quieras. No necesito su teléfono.',
+  '',
+  '*qr 150 corte de pelo*',
+  'Te doy un código QR para que tu cliente lo escanee con la app de su banco.',
   '',
   '*resumen*',
   'Lo cobrado hoy y lo que sigue pendiente.',
@@ -86,13 +101,15 @@ export const texts = {
       .join('\n'),
 
   expired: (charge, canLink) =>
-    [
+    charge.kind === 'qr'
+      ? `⏰ El QR de ${amountAndConcept(charge)} expiró sin pagarse. Si tu cliente todavía quiere pagar, pide uno nuevo.`
+      : [
       `⏰ El cobro de ${describe(charge)} expiró sin pagarse.`,
       '',
       canLink
         ? 'Responde *liga* y te mando una liga de pago para que se la reenvíes, o vuelve a escribir el cobro para intentarlo otra vez.'
         : 'Vuelve a escribir el cobro para intentarlo otra vez.',
-    ].join('\n'),
+      ].join('\n'),
 
   noExpiredCharge: () => 'No tienes ningún cobro expirado reciente para el que pueda generar una liga.',
 
@@ -106,6 +123,34 @@ export const texts = {
       '',
       'Te aviso en cuanto pague.',
     ].join('\n'),
+
+  directLink: (charge) =>
+    [
+      `Esta es tu liga para cobrar ${amountAndConcept(charge)}. Mándasela a tu cliente por WhatsApp, correo o donde quieras:`,
+      '',
+      charge.linkUrl,
+      '',
+      'Puede pagar con CoDi o con tarjeta. Te aviso en cuanto pague.',
+    ].join('\n'),
+
+  qrCaption: (charge, minutes) =>
+    [
+      `QR para cobrar ${amountAndConcept(charge)}.`,
+      `Tu cliente lo escanea con la app de su banco. Vence en ${minutes} minutos y te aviso en cuanto pague.`,
+    ].join('\n'),
+
+  qrFailed: (charge, reason) => `No pude generar el QR de ${amountAndConcept(charge)}. ${reason}`,
+
+  directLinkFailed: (charge, reason) => `No pude generar la liga de ${amountAndConcept(charge)}. ${reason}`,
+
+  demoAmountLimit: (maxCents) =>
+    `En la demo pública el monto máximo es de ${money(maxCents)}. Los cobros son reales, así que prueba con $0.01.`,
+
+  demoTooMany: () =>
+    'Llegaste al límite de cobros de la demo por ahora. Espera una hora para probar de nuevo.',
+
+  payerTooMany: (payerPhone) =>
+    `Ya se mandaron varios cobros al ${phone(payerPhone)} en la última hora. Para no molestar a esa persona, espera un rato antes de volver a intentarlo.`,
 
   linkFailed: (charge) => `No pude generar la liga para el cobro de ${describe(charge)}. Intenta de nuevo en un momento.`,
 

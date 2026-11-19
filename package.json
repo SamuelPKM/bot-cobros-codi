@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "express": "^5.2.1",
+    "qrcode": "^1.5.4",
     "standardwebhooks": "^1.1.1"
   }
 }

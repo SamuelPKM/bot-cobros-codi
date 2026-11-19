@@ -24,6 +24,35 @@ export function normalizePhone(input) {
   return null;
 }
 
+/** Valida el texto de un monto. Devuelve { amount } o { error }. */
+function parseAmount(amountText) {
+  if (!/^(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$/.test(amountText)) {
+    return { error: `No entendí el monto "${amountText}". Usa números con máximo 2 decimales, como 150 o 150.50` };
+  }
+  const amount = Number(amountText.replace(/,/g, ''));
+  if (amount <= 0) return { error: 'El monto debe ser mayor a 0' };
+  if (amount > MAX_AMOUNT) return { error: 'El monto máximo por cobro es de $1,000,000' };
+  return { amount };
+}
+
+const AMOUNT_COMMAND = /^\s*(liga|qr)\s+(?:de\s+)?\$?\s*([\d,]+(?:\.\d+)?)\s*(?:pesos|mxn)?(?:\s+(?:por\s+)?(.*?))?\s*$/is;
+
+/**
+ * Cobros sin teléfono: "liga 150 corte de pelo" o "qr 150 corte de pelo".
+ * Devuelve { ok: true, kind: 'link' | 'qr', amount, concept } o { ok: false, error }.
+ */
+export function parseAmountCommand(text) {
+  const keyword = /^\s*(liga|qr)\b/i.exec(String(text ?? ''))?.[1]?.toLowerCase();
+  const example = keyword === 'qr' ? 'qr 150 corte de pelo' : 'liga 150 corte de pelo';
+  const match = AMOUNT_COMMAND.exec(String(text ?? ''));
+  if (!match) return { ok: false, error: `Escribe el monto después de "${keyword ?? 'liga'}". Ejemplo: ${example}` };
+
+  const [, word, amountText, concept] = match;
+  const parsed = parseAmount(amountText);
+  if (parsed.error) return { ok: false, error: parsed.error };
+  return { ok: true, kind: word.toLowerCase() === 'qr' ? 'qr' : 'link', amount: parsed.amount, concept: concept || null };
+}
+
 /**
  * Devuelve { ok: true, amount, phoneNumber, concept } o { ok: false, error }.
  * `error` es un texto listo para responderle al comerciante.
@@ -34,12 +63,9 @@ export function parseCommand(text) {
 
   const [, amountText, rest] = match;
 
-  if (!/^(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$/.test(amountText)) {
-    return { ok: false, error: `No entendí el monto "${amountText}". Usa números con máximo 2 decimales, como 150 o 150.50` };
-  }
-  const amount = Number(amountText.replace(/,/g, ''));
-  if (amount <= 0) return { ok: false, error: 'El monto debe ser mayor a 0' };
-  if (amount > MAX_AMOUNT) return { ok: false, error: 'El monto máximo por cobro es de $1,000,000' };
+  const parsed = parseAmount(amountText);
+  if (parsed.error) return { ok: false, error: parsed.error };
+  const { amount } = parsed;
 
   // El teléfono puede venir en varias partes ("55 1234 5678") y el concepto
   // puede empezar con un número ("2 cortes"): se prueba primero con todas las

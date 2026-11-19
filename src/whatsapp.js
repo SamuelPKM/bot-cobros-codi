@@ -22,35 +22,58 @@ export function createWhatsAppClient({
   if (!token) throw new Error('createWhatsAppClient: falta token');
   if (!phoneNumberId) throw new Error('createWhatsAppClient: falta phoneNumberId');
 
+  async function call(path, body) {
+    let response;
+    try {
+      response = await fetchImpl(`${baseUrl}/${apiVersion}/${phoneNumberId}/${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // Con FormData, fetch pone el Content-Type multipart con su boundary.
+          ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        },
+        body: body instanceof FormData ? body : JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (cause) {
+      const error = new WhatsAppError(`No se pudo conectar con WhatsApp: ${cause.message}`);
+      error.cause = cause;
+      throw error;
+    }
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new WhatsAppError(json?.error?.message || `WhatsApp respondió HTTP ${response.status}`, {
+        status: response.status,
+        code: json?.error?.code,
+      });
+    }
+    return json;
+  }
+
   return {
     /** Manda un mensaje de texto. `to` es el número en formato internacional, solo dígitos. */
     async sendText(to, body) {
-      let response;
-      try {
-        response = await fetchImpl(`${baseUrl}/${apiVersion}/${phoneNumberId}/messages`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to,
-            type: 'text',
-            text: { body, preview_url: false },
-          }),
-          signal: AbortSignal.timeout(timeoutMs),
-        });
-      } catch (cause) {
-        const error = new WhatsAppError(`No se pudo conectar con WhatsApp: ${cause.message}`);
-        error.cause = cause;
-        throw error;
-      }
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new WhatsAppError(json?.error?.message || `WhatsApp respondió HTTP ${response.status}`, {
-          status: response.status,
-          code: json?.error?.code,
-        });
-      }
-      return json;
+      return call('messages', { messaging_product: 'whatsapp', to, type: 'text', text: { body, preview_url: false } });
+    },
+
+    /**
+     * Manda una imagen PNG con un pie de foto. WhatsApp pide subirla primero
+     * (POST /media, que devuelve un id) y luego mandarla por ese id.
+     */
+    async sendImage(to, { png, caption }) {
+      const form = new FormData();
+      form.append('messaging_product', 'whatsapp');
+      form.append('type', 'image/png');
+      form.append('file', new Blob([png], { type: 'image/png' }), 'qr.png');
+      const media = await call('media', form);
+      if (!media?.id) throw new WhatsAppError('WhatsApp no devolvió el id de la imagen subida');
+
+      return call('messages', {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'image',
+        image: { id: media.id, ...(caption ? { caption } : {}) },
+      });
     },
   };
 }

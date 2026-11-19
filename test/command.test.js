@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { normalizePhone, parseCommand } from '../src/command.js';
+import { normalizePhone, parseAmountCommand, parseCommand } from '../src/command.js';
 
 describe('normalizePhone', () => {
   it('deja en 10 dígitos los formatos comunes', () => {
@@ -80,5 +80,29 @@ describe('parseCommand', () => {
   it('rechaza teléfonos que no quedan en 10 dígitos', () => {
     assert.match(parseCommand('cobra 150 a 12345 corte').error, /10 dígitos/);
     assert.match(parseCommand('cobra 150 a Juan corte').error, /10 dígitos/);
+  });
+});
+
+describe('parseAmountCommand', () => {
+  it('entiende liga y qr con monto y concepto', () => {
+    assert.deepEqual(parseAmountCommand('liga 150 corte de pelo'), { ok: true, kind: 'link', amount: 150, concept: 'corte de pelo' });
+    assert.deepEqual(parseAmountCommand('QR $1,200.50 anticipo'), { ok: true, kind: 'qr', amount: 1200.5, concept: 'anticipo' });
+    assert.deepEqual(parseAmountCommand('liga de 80 pesos por barba'), { ok: true, kind: 'link', amount: 80, concept: 'barba' });
+    assert.deepEqual(parseAmountCommand('qr 0.01'), { ok: true, kind: 'qr', amount: 0.01, concept: null });
+  });
+
+  it('separa bien un concepto que empieza con número', () => {
+    assert.equal(parseAmountCommand('qr 300 2 cortes').concept, '2 cortes');
+  });
+
+  it('explica qué falta, con un ejemplo del mismo comando', () => {
+    assert.match(parseAmountCommand('qr').error, /Ejemplo: qr 150/);
+    assert.match(parseAmountCommand('liga corte').error, /Ejemplo: liga 150/);
+  });
+
+  it('valida el monto igual que el cobro por teléfono', () => {
+    assert.match(parseAmountCommand('qr 0 prueba').error, /mayor a 0/);
+    assert.match(parseAmountCommand('liga 10.999 prueba').error, /monto/);
+    assert.match(parseAmountCommand('qr 2000000').error, /máximo/);
   });
 });

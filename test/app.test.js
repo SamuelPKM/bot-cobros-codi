@@ -242,6 +242,72 @@ describe('servidor', () => {
     });
   });
 
+  describe('POST /webhooks/pey: pago de un QR', () => {
+    async function qrCharge(amount = 150) {
+      const charge = state.db.createCharge({
+        kind: 'qr',
+        merchantPhone: '5511112222',
+        merchantWaId: '5215511112222',
+        amountCents: Math.round(amount * 100),
+        concept: 'corte',
+        status: 'creating',
+      });
+      const qr = await state.pey.createQr({ amount, metadata: { chargeId: String(charge.id) } });
+      return state.db.updateCharge(charge.id, { status: 'qr', qrId: qr.id });
+    }
+
+    const qrPaidEvent = (codiQrId, transactionId, amount = 150) => ({
+      amount,
+      apiKeyId: '01M3QMMR6X9CBVDY1SF3G8QWNW',
+      codiQrId,
+      concept: 'Barbería Leo: corte',
+      datePaid: 1790725000,
+      metadata: {},
+      numRef: '1',
+      transactionId,
+      type: 'codi.qr.payment_received',
+    });
+
+    it('liga el pago al cobro por el id del QR y lo marca pagado por QR', async () => {
+      const charge = await qrCharge();
+      const transactionId = state.pey.payQr(charge.qrId);
+
+      const res = await post('/webhooks/pey', peyRequest(qrPaidEvent(charge.qrId, transactionId)));
+
+      assert.equal((await res.json()).result, 'paid');
+      const paid = state.db.getCharge(charge.id);
+      assert.equal(paid.status, 'paid');
+      assert.equal(paid.paidVia, 'qr');
+      assert.equal(paid.transactionId, transactionId);
+      assert.equal(paid.trackingKey, 'RASTREOQR');
+      assert.equal(state.paid.length, 1);
+    });
+
+    it('un segundo pago al mismo QR se registra como pago de más, sin avisar otra vez', async () => {
+      const charge = await qrCharge();
+      const first = state.pey.payQr(charge.qrId);
+      await post('/webhooks/pey', peyRequest(qrPaidEvent(charge.qrId, first), { id: 'msg_q1' }));
+
+      const second = state.pey.payQr(charge.qrId);
+      const res = await post('/webhooks/pey', peyRequest(qrPaidEvent(charge.qrId, second), { id: 'msg_q2' }));
+
+      assert.equal((await res.json()).result, 'extra_payment');
+      assert.equal(state.db.getCharge(charge.id).transactionId, first);
+      assert.equal(state.paid.length, 1);
+    });
+
+    it('no marca pagado si el monto del QR no coincide', async () => {
+      const charge = await qrCharge(150);
+      const transactionId = state.pey.payQr(charge.qrId);
+      state.pey.transactions.get(transactionId).amountBreakdown.base = 1;
+
+      const res = await post('/webhooks/pey', peyRequest(qrPaidEvent(charge.qrId, transactionId, 1)));
+
+      assert.equal((await res.json()).result, 'amount_mismatch');
+      assert.equal(state.db.getCharge(charge.id).status, 'qr');
+    });
+  });
+
   describe('POST /webhooks/pey: liga de pago', () => {
     async function chargeWithLink(amount = 150) {
       const charge = state.db.createCharge({

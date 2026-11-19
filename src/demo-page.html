@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Demo de cobros CoDi</title>
+<style>
+  :root {
+    --bg: #eef1ef;
+    --panel: #ffffff;
+    --text: #17201c;
+    --muted: #5b6862;
+    --line: #d9dfdc;
+    --accent: #0f766e;
+    --accent-text: #ffffff;
+    --mine: #d8f3ec;
+    --theirs: #ffffff;
+    --warn-bg: #fff7e0;
+    --warn-line: #e9cf7a;
+    --warn-text: #5c4700;
+    --chip: #f3f6f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1513;
+      --panel: #17201c;
+      --text: #e6ece9;
+      --muted: #9aa8a2;
+      --line: #2a3632;
+      --accent: #2dd4bf;
+      --accent-text: #062b27;
+      --mine: #134e48;
+      --theirs: #1e2925;
+      --warn-bg: #2b2410;
+      --warn-line: #5f4d14;
+      --warn-text: #f1d98a;
+      --chip: #1e2925;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .app {
+    display: flex;
+    flex-direction: column;
+    max-width: 560px;
+    height: 100dvh;
+    margin: 0 auto;
+    background: var(--panel);
+    border-inline: 1px solid var(--line);
+  }
+  header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 18px; }
+  .who { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+  .notice {
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-line);
+    border-radius: 8px;
+    color: var(--warn-text);
+    font-size: 13px;
+  }
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--bg);
+  }
+  .msg {
+    max-width: 85%;
+    padding: 8px 11px;
+    border-radius: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    border: 1px solid var(--line);
+  }
+  .msg.bot { align-self: flex-start; background: var(--theirs); border-top-left-radius: 4px; }
+  .msg.user { align-self: flex-end; background: var(--mine); border-top-right-radius: 4px; }
+  .msg a { color: var(--accent); }
+  .msg img { display: block; width: 100%; max-width: 260px; margin: 2px 0 6px; border-radius: 6px; background: #fff; }
+  .msg.pending { opacity: 0.6; }
+  .chips { display: flex; gap: 6px; padding: 8px 16px 0; overflow-x: auto; }
+  .chips button {
+    flex: none;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--chip);
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  form { display: flex; gap: 8px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); }
+  input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+  }
+  form button {
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  form button:disabled { opacity: 0.6; cursor: default; }
+  .error { margin: 0 16px; color: #b42318; font-size: 14px; min-height: 0; }
+  @media (prefers-color-scheme: dark) { .error { color: #f97066; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Demo: cobra con CoDi desde el chat</h1>
+    <p class="who">Eres el comerciante <strong>{{MERCHANT_NAME}}</strong>. Escribe como lo harías por WhatsApp.</p>
+    <p class="notice">Los cobros son reales: usan el ambiente productivo de pey y el dinero no se devuelve. El máximo es de ${{MAX_AMOUNT}}; prueba con $0.01.</p>
+  </header>
+  <div id="log" aria-live="polite"></div>
+  <div class="chips" aria-label="Ejemplos">
+    <button type="button" data-text="cobra 0.01 a  prueba" data-cursor="12">cobra 0.01 a tu celular</button>
+    <button type="button" data-text="qr 0.01 prueba">qr 0.01</button>
+    <button type="button" data-text="liga 0.01 prueba">liga 0.01</button>
+    <button type="button" data-text="resumen">resumen</button>
+    <button type="button" data-text="ayuda">ayuda</button>
+  </div>
+  <p class="error" id="error" role="alert"></p>
+  <form id="form" autocomplete="off">
+    <input id="text" name="text" maxlength="300" placeholder="cobra 0.01 a 5512345678 prueba" aria-label="Mensaje">
+    <button id="send" type="submit">Enviar</button>
+  </form>
+</div>
+<script>
+(() => {
+  const log = document.getElementById('log');
+  const form = document.getElementById('form');
+  const input = document.getElementById('text');
+  const send = document.getElementById('send');
+  const errorBox = document.getElementById('error');
+  const KEY = 'demo-cobros-session';
+  let session = null;
+  let lastId = 0;
+  let busy = false;
+
+  const store = {
+    get() { try { return localStorage.getItem(KEY); } catch { return null; } },
+    set(v) { try { localStorage.setItem(KEY, v); } catch {} },
+    clear() { try { localStorage.removeItem(KEY); } catch {} },
+  };
+
+  // Texto del bot -> nodos: *negritas* y ligas https://, sin interpretar HTML.
+  function render(text, into) {
+    const parts = String(text).split(/(https:\/\/[^\s]+|\*[^*\n]+\*)/g);
+    for (const part of parts) {
+      if (!part) continue;
+      if (/^https:\/\//.test(part)) {
+        const a = document.createElement('a');
+        a.href = part;
+        a.textContent = part;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        into.append(a);
+      } else if (/^\*[^*\n]+\*$/.test(part)) {
+        const b = document.createElement('strong');
+        b.textContent = part.slice(1, -1);
+        into.append(b);
+      } else {
+        into.append(document.createTextNode(part));
+      }
+    }
+  }
+
+  function add(message) {
+    if (message.id && message.id <= lastId) return;
+    if (message.id) lastId = message.id;
+    const div = document.createElement('div');
+    div.className = `msg ${message.sender === 'user' ? 'user' : 'bot'}`;
+    if (message.image) {
+      const img = document.createElement('img');
+      img.src = message.image;
+      img.alt = 'Código QR para pagar con CoDi';
+      div.append(img);
+    }
+    if (message.body) render(message.body, div);
+    log.append(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(session ? { 'X-Demo-Session': session } : {}) },
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      store.clear();
+      session = null;
+    }
+    if (!response.ok) throw new Error(body.error || 'No se pudo conectar. Intenta de nuevo.');
+    return body;
+  }
+
+  async function start() {
+    session = store.get();
+    try {
+      if (session) {
+        const { messages } = await api('/demo/api/messages?after=0');
+        messages.forEach(add);
+        return;
+      }
+    } catch {
+      session = null;
+    }
+    const created = await api('/demo/api/session', { method: 'POST' });
+    session = created.sessionId;
+    store.set(session);
+    const { messages } = await api('/demo/api/messages?after=0');
+    messages.forEach(add);
+  }
+
+  async function poll() {
+    if (!session || busy || document.hidden) return;
+    try {
+      const { messages } = await api(`/demo/api/messages?after=${lastId}`);
+      messages.forEach(add);
+    } catch {}
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text || busy) return;
+    errorBox.textContent = '';
+    busy = true;
+    send.disabled = true;
+    const draft = document.createElement('div');
+    draft.className = 'msg user pending';
+    draft.textContent = text;
+    log.append(draft);
+    log.scrollTop = log.scrollHeight;
+    input.value = '';
+    try {
+      if (!session) await start();
+      const { messages } = await api('/demo/api/messages', { method: 'POST', body: JSON.stringify({ text, after: lastId }) });
+      draft.remove();
+      messages.forEach(add);
+    } catch (error) {
+      draft.remove();
+      input.value = text;
+      errorBox.textContent = error.message;
+    } finally {
+      busy = false;
+      send.disabled = false;
+      input.focus();
+    }
+  });
+
+  document.querySelectorAll('.chips button').forEach((button) => {
+    button.addEventListener('click', () => {
+      input.value = button.dataset.text;
+      input.focus();
+      const at = Number(button.dataset.cursor);
+      if (at) input.setSelectionRange(at, at);
+    });
+  });
+
+  start().catch((error) => { errorBox.textContent = error.message; });
+  setInterval(poll, 2500);
+  document.addEventListener('visibilitychange', poll);
+})();
+</script>
+</body>
+</html>

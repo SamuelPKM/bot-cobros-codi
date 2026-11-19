@@ -23,7 +23,8 @@ describe('bot', () => {
     return createBot({
       db,
       pey,
-      whatsapp,
+      outbox: whatsapp,
+      renderQr: async (qrString) => Buffer.from(`PNG:${qrString}`),
       merchants: new Map([[MERCHANT_PHONE, 'Barbería Leo']]),
       publicBaseUrl: 'https://bot.example.com',
       now,
@@ -321,6 +322,231 @@ describe('bot', () => {
       await say('liga');
       assert.equal(pey.links.length, 0);
       assert.match(whatsapp.last(), /todavía no están configuradas/);
+    });
+  });
+
+  describe('liga directa: "liga 150 corte"', () => {
+    it('genera la liga sin pedir teléfono ni confirmación', async () => {
+      await say('liga 150 corte de pelo');
+
+      const charge = lastCharge();
+      assert.equal(charge.kind, 'link');
+      assert.equal(charge.status, 'link');
+      assert.equal(charge.payerPhone, null);
+      assert.equal(pey.pushes.length, 0);
+      assert.deepEqual(pey.links, [
+        {
+          amount: 150,
+          successUrl: 'https://bot.example.com/pago/gracias',
+          backUrl: 'https://bot.example.com/pago/cancelado',
+          clientReferenceId: `cobro-${charge.id}`,
+          metadata: { chargeId: String(charge.id) },
+        },
+      ]);
+      assert.match(whatsapp.last(), /Esta es tu liga para cobrar \$150\.00 por "corte de pelo"/);
+      assert.match(whatsapp.last(), /https:\/\/app\.mipey\.mx\/payment-link\/LINK1/);
+    });
+
+    it('acepta "$", "de" y "por", y el concepto es opcional', async () => {
+      await say('Liga de $80.50 por barba');
+      assert.equal(pey.links[0].amount, 80.5);
+      assert.equal(lastCharge().concept, 'barba');
+
+      await say('liga 20');
+      assert.equal(lastCharge().concept, null);
+    });
+
+    it('explica cómo usarla si falta el monto', async () => {
+      await say('liga corte');
+      assert.match(whatsapp.last(), /Escribe el monto después de "liga"\. Ejemplo: liga 150 corte de pelo/);
+      assert.equal(pey.links.length, 0);
+    });
+
+    it('si pey falla, el cobro queda fallido y se explica', async () => {
+      pey.fail = new PeyError('mantenimiento', { status: 503, type: 'SERVICE_UNAVAILABLE' });
+      await say('liga 150 corte');
+
+      assert.equal(lastCharge().status, 'failed');
+      assert.match(whatsapp.last(), /No pude generar la liga de \$150\.00/);
+      assert.match(whatsapp.last(), /mantenimiento/);
+    });
+
+    it('sin URL pública avisa que las ligas no están configuradas', async () => {
+      bot = makeBot({ publicBaseUrl: null });
+      await say('liga 150 corte');
+      assert.match(whatsapp.last(), /todavía no están configuradas/);
+      assert.equal(lastCharge(), undefined);
+    });
+  });
+
+  describe('QR: "qr 150 corte"', () => {
+    it('crea el QR con expiración de 15 minutos y manda la imagen al comerciante', async () => {
+      await say('qr 150 corte de pelo');
+
+      const charge = lastCharge();
+      assert.deepEqual(pey.qrs, [
+        {
+          amount: 150,
+          concept: 'Barbería Leo: corte de pelo',
+          expiration: 900,
+          numRef: String(charge.id),
+          metadata: { chargeId: String(charge.id) },
+        },
+      ]);
+      assert.equal(charge.kind, 'qr');
+      assert.equal(charge.status, 'qr');
+      assert.equal(charge.qrId, 'IDC1');
+      assert.equal(charge.expiresAt, now() + 15 * MINUTE);
+
+      const sent = whatsapp.sent.at(-1);
+      assert.equal(sent.to, MERCHANT);
+      assert.equal(sent.png.toString(), 'PNG:{"TYP":1,"v":"01","ic":0,"IDC":"IDC1"}'); // el qrString va tal cual
+      assert.match(sent.body, /QR para cobrar \$150\.00 por "corte de pelo"/);
+      assert.match(sent.body, /Vence en 15 minutos/);
+    });
+
+    it('si pey falla, no manda imagen y explica por qué', async () => {
+      pey.fail = new PeyError('account is not active', { status: 400, type: 'INVALID_STATE' });
+      await say('qr 150 corte');
+
+      assert.equal(lastCharge().status, 'failed');
+      assert.equal(whatsapp.sent.at(-1).png, undefined);
+      assert.match(whatsapp.last(), /No pude generar el QR/);
+      assert.match(whatsapp.last(), /todavía no está activa en CoDi/);
+    });
+
+    it('explica cómo usarlo si falta el monto', async () => {
+      await say('qr');
+      assert.match(whatsapp.last(), /Ejemplo: qr 150 corte de pelo/);
+    });
+
+    it('expira el QR vencido sin pago y lo avisa', async () => {
+      await say('qr 150 corte');
+      now.advance(16 * MINUTE);
+      await bot.sweep();
+
+      assert.equal(lastCharge().status, 'expired');
+      assert.match(whatsapp.last(), /⏰ El QR de \$150\.00 por "corte" expiró/);
+      assert.doesNotMatch(whatsapp.last(), /Responde \*liga\*/);
+    });
+
+    it('si el QR se pagó y no llegó el webhook, el barrido lo detecta', async () => {
+      await say('qr 150 corte');
+      const transactionId = pey.payQr('IDC1');
+      now.advance(16 * MINUTE);
+      await bot.sweep();
+
+      const charge = lastCharge();
+      assert.equal(charge.status, 'paid');
+      assert.equal(charge.paidVia, 'qr');
+      assert.equal(charge.transactionId, transactionId);
+      assert.match(whatsapp.last(), /✅ Pagado: \$150\.00 con QR por "corte"/);
+      assert.match(whatsapp.last(), /Clave de rastreo: RASTREOQR/);
+    });
+
+    it('"liga" sola no convierte en liga un QR expirado', async () => {
+      await say('qr 150 corte');
+      now.advance(16 * MINUTE);
+      await bot.sweep();
+      await say('liga');
+
+      assert.equal(pey.links.length, 0);
+      assert.match(whatsapp.last(), /No tienes ningún cobro expirado/);
+    });
+
+    it('el resumen cuenta QR y ligas pendientes', async () => {
+      await say('qr 150 corte');
+      await say('liga 80 barba');
+      await say('resumen');
+
+      assert.match(whatsapp.last(), /Pendientes \(2\):/);
+      assert.match(whatsapp.last(), /• \$150\.00 con QR por "corte"/);
+      assert.match(whatsapp.last(), /• \$80\.00 con liga de pago por "barba"/);
+    });
+
+    it('la ayuda menciona liga y QR', async () => {
+      await say('ayuda');
+      assert.match(whatsapp.last(), /\*liga 150 corte de pelo\*/);
+      assert.match(whatsapp.last(), /\*qr 150 corte de pelo\*/);
+    });
+  });
+
+  describe('comerciante de la demo web', () => {
+    const DEMO = 'demo:0123456789abcdef0123456789abcdef';
+    const demo = { merchantName: 'Negocio de prueba', maxAmountCents: 100, maxChargesPerHour: 3, maxPushesPerPayerPerHour: 2 };
+    const demoSay = (text, from = DEMO) => bot.handleMessage({ from, text });
+    const demoCharges = (from = DEMO) => db.listSince(from, 0);
+
+    beforeEach(() => {
+      bot = makeBot({ demo });
+    });
+
+    it('sin demo configurada, una sesión de demo no puede cobrar', async () => {
+      bot = makeBot();
+      await demoSay('cobra 0.01 a 5512345678 prueba');
+      assert.match(whatsapp.last(), /no está registrado como comerciante/);
+    });
+
+    it('cobra con el nombre del negocio de demo', async () => {
+      await demoSay('cobra 0.01 a 5512345678 prueba');
+      await demoSay('sí');
+
+      assert.equal(pey.pushes[0].concept, 'Negocio de prueba: prueba');
+      assert.equal(demoCharges()[0].merchantPhone, DEMO);
+      assert.equal(whatsapp.sent.at(-1).to, DEMO);
+    });
+
+    it('rechaza montos arriba del máximo, en push, liga y QR', async () => {
+      for (const text of ['cobra 1.01 a 5512345678 prueba', 'liga 5 prueba', 'qr 2 prueba']) {
+        await demoSay(text);
+        assert.match(whatsapp.last(), /el monto máximo es de \$1\.00/);
+      }
+      assert.equal(demoCharges().length, 0);
+    });
+
+    it('limita los cobros por hora de cada sesión', async () => {
+      await demoSay('qr 0.01 uno');
+      await demoSay('liga 0.01 dos');
+      await demoSay('qr 0.01 tres');
+      await demoSay('qr 0.01 cuatro');
+
+      assert.equal(pey.qrs.length + pey.links.length, 3);
+      assert.match(whatsapp.last(), /límite de cobros de la demo/);
+
+      now.advance(61 * MINUTE);
+      await demoSay('qr 0.01 cinco');
+      assert.equal(pey.qrs.length, 3);
+    });
+
+    it('limita los push a un mismo teléfono, aunque vengan de sesiones distintas', async () => {
+      const other = 'demo:ffffffffffffffffffffffffffffffff';
+      await demoSay('cobra 0.01 a 5512345678 uno');
+      await demoSay('sí');
+      await demoSay('cobra 0.01 a 5512345678 dos', other);
+      await demoSay('sí', other);
+      await demoSay('cobra 0.01 a 5512345678 tres', other);
+
+      assert.equal(pey.pushes.length, 2);
+      assert.match(whatsapp.last(), /Ya se mandaron varios cobros al 55 1234 5678/);
+    });
+
+    it('revisa el límite otra vez al confirmar', async () => {
+      const other = 'demo:ffffffffffffffffffffffffffffffff';
+      await demoSay('cobra 0.01 a 5512345678 uno');
+      await demoSay('cobra 0.01 a 5512345678 dos', other);
+      await demoSay('cobra 0.01 a 5512345678 tres', 'demo:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee');
+      await demoSay('sí');
+      await demoSay('sí', other);
+      await demoSay('sí', 'demo:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee');
+
+      assert.equal(pey.pushes.length, 2);
+      assert.equal(demoCharges('demo:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee')[0].status, 'cancelled');
+    });
+
+    it('los límites de la demo no aplican a los comerciantes de WhatsApp', async () => {
+      await say('cobra 500 a 5512345678 corte');
+      await say('sí');
+      assert.equal(pey.pushes[0].amount, 500);
     });
   });
 

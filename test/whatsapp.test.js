@@ -40,6 +40,80 @@ describe('cliente de WhatsApp', () => {
   });
 });
 
+describe('imágenes por WhatsApp', () => {
+  it('sendImage sube el PNG a /media y luego lo manda por su id', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init });
+      const body = url.endsWith('/media') ? { id: 'MEDIA123' } : { messages: [{ id: 'wamid.img' }] };
+      return new Response(JSON.stringify(body), { status: 200 });
+    };
+    const whatsapp = createWhatsAppClient({ token: 't', phoneNumberId: '999', fetchImpl });
+
+    await whatsapp.sendImage('5215511112222', { png: Buffer.from('png'), caption: 'QR para cobrar' });
+
+    assert.equal(calls[0].url, 'https://graph.facebook.com/v23.0/999/media');
+    assert.ok(calls[0].init.body instanceof FormData);
+    assert.equal(calls[0].init.body.get('messaging_product'), 'whatsapp');
+    assert.equal(calls[0].init.body.get('file').type, 'image/png');
+    assert.equal(calls[0].init.headers['Content-Type'], undefined); // fetch pone el multipart con su boundary
+
+    assert.equal(calls[1].url, 'https://graph.facebook.com/v23.0/999/messages');
+    assert.deepEqual(JSON.parse(calls[1].init.body), {
+      messaging_product: 'whatsapp',
+      to: '5215511112222',
+      type: 'image',
+      image: { id: 'MEDIA123', caption: 'QR para cobrar' },
+    });
+  });
+
+  it('si la subida falla no manda el mensaje', async () => {
+    const calls = [];
+    const fetchImpl = async (url) => {
+      calls.push(url);
+      return new Response(JSON.stringify({ error: { message: 'bad media', code: 100 } }), { status: 400 });
+    };
+    const whatsapp = createWhatsAppClient({ token: 't', phoneNumberId: '999', fetchImpl });
+
+    await assert.rejects(whatsapp.sendImage('52155', { png: Buffer.from('x') }), WhatsAppError);
+    assert.equal(calls.length, 1);
+  });
+});
+
+describe('QR en el cliente de pey', () => {
+  it('createQr manda POST /codi/qr y exige expiración', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({ id: 'IDC1', qrString: '{}', qrImage: null }), { status: 201 });
+    };
+    const pey = createPeyClient({ apiKey: 'k', fetchImpl });
+
+    await pey.createQr({ amount: 150, concept: 'corte', expiration: 900, numRef: '7', metadata: { chargeId: '7' } });
+    assert.equal(calls[0].url, 'https://api.pey.mx/codi/qr');
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      amount: 150,
+      expiration: 900,
+      generateImage: false,
+      concept: 'corte',
+      numRef: '7',
+      metadata: { chargeId: '7' },
+    });
+
+    // Sin expiración el QR no expira y acepta varios pagos: se rechaza antes de llamar.
+    await assert.rejects(pey.createQr({ amount: 1, expiration: 0 }), { type: 'INVALID_PARAMETER' });
+    await assert.rejects(pey.createQr({ amount: 0, expiration: 900 }), { type: 'INVALID_AMOUNT' });
+    assert.equal(calls.length, 1);
+  });
+
+  it('listQrTransactions devuelve los items de la primera página', async () => {
+    const fetchImpl = async () =>
+      new Response(JSON.stringify({ items: [{ id: 'TX1', status: 'PAID' }], nextToken: null }), { status: 200 });
+    const pey = createPeyClient({ apiKey: 'k', fetchImpl });
+    assert.deepEqual(await pey.listQrTransactions('IDC1'), [{ id: 'TX1', status: 'PAID' }]);
+  });
+});
+
 describe('ligas de pago en el cliente de pey', () => {
   it('createPaymentLink manda POST /payment-link/create', async () => {
     const calls = [];

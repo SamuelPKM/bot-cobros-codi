@@ -37,11 +37,25 @@ export function loadConfig({ needWebhookSecret = false } = {}) {
     port: Number(process.env.PORT || 3000),
     databaseFile: process.env.DATABASE_FILE || 'data/cobros.db',
     publicBaseUrl: (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '') || null,
+    trustProxy: process.env.TRUST_PROXY === 'true',
     whatsapp: null,
+    demo: null,
   };
 
   if (config.publicBaseUrl && !config.publicBaseUrl.startsWith('https://')) {
     fail('PUBLIC_BASE_URL debe empezar con https://.');
+  }
+
+  // Demo web pública en /demo: cobros reales con monto máximo y límites por hora.
+  if (process.env.DEMO_ENABLED === 'true') {
+    const maxAmount = Number(process.env.DEMO_MAX_AMOUNT || '1');
+    if (!Number.isFinite(maxAmount) || maxAmount <= 0) fail('DEMO_MAX_AMOUNT debe ser un monto mayor a 0.');
+    config.demo = {
+      merchantName: process.env.DEMO_MERCHANT_NAME || 'Negocio de prueba',
+      maxAmountCents: Math.round(maxAmount * 100),
+      maxChargesPerHour: Number(process.env.DEMO_MAX_CHARGES_PER_HOUR || '10'),
+      maxPushesPerPayerPerHour: Number(process.env.DEMO_MAX_PUSHES_PER_PHONE_PER_HOUR || '3'),
+    };
   }
 
   // WhatsApp es opcional (el primer cobro real no lo necesita), pero se configura completo o nada.

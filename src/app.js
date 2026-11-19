@@ -13,6 +13,7 @@
 
 import express from 'express';
 import { Webhook } from 'standardwebhooks';
+import { mountDemo } from './demo.js';
 import { toCents } from './pey.js';
 import { extractMessages, verifyMetaSignature } from './whatsapp.js';
 
@@ -23,15 +24,39 @@ const bodyText = (req) => (Buffer.isBuffer(req.body) ? req.body.toString('utf8')
 /**
  * @param whatsapp Opcional: { appSecret, verifyToken, onMessage }. Sin él solo
  *   se monta el webhook de pey (suficiente para el primer cobro real).
+ * @param demo Opcional: { onMessage, merchantName, maxAmount }. Monta la demo web pública en /demo.
+ * @param trustProxy Detrás de un proxy (casi cualquier hosting), para que los
+ *   límites por IP vean la IP real del visitante.
  * @param onPaid Se llama con el cobro cuando queda pagado; debe avisar al comerciante.
  */
-export function createApp({ peyWebhookSecret, pey, db, onPaid = async () => {}, whatsapp = null, log = console }) {
+export function createApp({
+  peyWebhookSecret,
+  pey,
+  db,
+  onPaid = async () => {},
+  whatsapp = null,
+  demo = null,
+  trustProxy = false,
+  now = Date.now,
+  log = console,
+}) {
   if (!peyWebhookSecret) throw new Error('createApp: falta peyWebhookSecret');
   const verifier = new Webhook(peyWebhookSecret);
   const app = express();
   app.disable('x-powered-by');
+  if (trustProxy) app.set('trust proxy', 1);
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
+  if (demo) {
+    app.get('/', (_req, res) => res.redirect('/demo'));
+    mountDemo(app, {
+      db,
+      onMessage: demo.onMessage,
+      page: { merchantName: demo.merchantName, maxAmount: demo.maxAmount },
+      now,
+      log,
+    });
+  }
 
   // ---------------------------------------------------------------- pey
 
@@ -77,9 +102,12 @@ export function createApp({ peyWebhookSecret, pey, db, onPaid = async () => {}, 
       throw new Error(`la transacción ${transactionId} está en ${tx.status}, no en PAID`);
     }
 
+    const isQr = event.type === 'codi.qr.payment_received';
     const chargeId = tx.metadata?.externalMetadata?.chargeId ?? event.metadata?.externalMetadata?.chargeId;
     const charge =
-      db.getChargeByTransactionId(transactionId) ?? (chargeId ? db.getCharge(Number(chargeId)) : null);
+      db.getChargeByTransactionId(transactionId) ??
+      (isQr && event.codiQrId ? db.getChargeByQrId(event.codiQrId) : null) ??
+      (chargeId ? db.getCharge(Number(chargeId)) : null);
     if (!charge) {
       log.warn(`[pey] pago de un cobro que no está en la base de datos: ${transactionId}`);
       return 'unknown_charge';
@@ -91,10 +119,16 @@ export function createApp({ peyWebhookSecret, pey, db, onPaid = async () => {}, 
       return 'amount_mismatch';
     }
 
+    if (charge.status === 'paid' && charge.transactionId && charge.transactionId !== transactionId) {
+      // Un QR puede recibir más de un pago mientras está vigente: es un pago de más, hay que aclararlo.
+      log.warn(`[pey] el cobro ${charge.id} ya estaba pagado y llegó otro pago (${transactionId}): revisar devolución`);
+      return 'extra_payment';
+    }
+
     const firstTime = db.markPaid(charge.id, {
       paidAt: tx.datePaid ?? event.datePaid,
       trackingKey: tx.metadata?.trackingKey ?? event.metadata?.trackingKey ?? null,
-      paidVia: 'push',
+      paidVia: isQr ? 'qr' : 'push',
       transactionId,
     });
     await onPaid(db.getCharge(charge.id));
