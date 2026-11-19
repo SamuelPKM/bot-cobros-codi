@@ -9,6 +9,13 @@ export function phone(tenDigits) {
   return `${tenDigits.slice(0, 2)} ${tenDigits.slice(2, 6)} ${tenDigits.slice(6)}`;
 }
 
+/** El comando para cobrar lo mismo con liga: "liga 150 corte de pelo" o "liga 80.50". */
+function linkCommand(charge) {
+  const cents = charge.amountCents;
+  const amount = cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2);
+  return `liga ${amount}${charge.concept ? ` ${charge.concept}` : ''}`;
+}
+
 /** "$150.00 por "corte"": para textos que ya dicen si es QR o liga. */
 function amountAndConcept(charge) {
   return `${money(charge.amountCents)}${charge.concept ? ` por "${charge.concept}"` : ''}`;
@@ -83,7 +90,15 @@ export const texts = {
       `Tu cliente tiene ${minutes} minutos para aprobarlo en la app de su banco. Te aviso en cuanto pague.`,
     ].join('\n'),
 
-  sendFailed: (charge, reason) => `No se pudo enviar el cobro de ${describe(charge)}. ${reason}`,
+  sendFailed: (charge, reason, { suggestLink = false } = {}) =>
+    [
+      `No se pudo enviar el cobro de ${describe(charge)}. ${reason}`,
+      suggestLink
+        ? `\nSi tu cliente no tiene CoDi activo, mándale una liga de pago, que también acepta tarjeta: *${linkCommand(charge)}*`
+        : null,
+    ]
+      .filter(Boolean)
+      .join('\n'),
 
   sendUnknown: (charge) =>
     [
@@ -107,7 +122,7 @@ export const texts = {
       `⏰ El cobro de ${describe(charge)} expiró sin pagarse.`,
       '',
       canLink
-        ? 'Responde *liga* y te mando una liga de pago para que se la reenvíes, o vuelve a escribir el cobro para intentarlo otra vez.'
+        ? 'Si tu cliente no tiene CoDi activo, no le llegó la solicitud. Responde *liga* y te mando una liga de pago para que se la reenvíes; también acepta tarjeta. O vuelve a escribir el cobro para intentarlo otra vez.'
         : 'Vuelve a escribir el cobro para intentarlo otra vez.',
       ].join('\n'),
 

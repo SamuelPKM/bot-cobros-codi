@@ -16,6 +16,10 @@ const HOUR_MS = 60 * 60 * 1000;
 export const QR_EXPIRATION_SECONDS = 15 * 60;
 const TIME_ZONE = 'America/Mexico_City';
 
+// Rechazos de pey que pueden venir de que el cliente no tiene CoDi. No incluye los
+// que son del comerciante o del servicio (cuenta inactiva, mantenimiento, monto).
+const MAYBE_NO_CODI = new Set(['BAD_REQUEST', 'INVALID_REQUEST', 'INVALID_PARAMETER', 'PEY_CONSISTENCY_ERROR', 'UNKNOWN']);
+
 const YES = new Set(['si', 's', 'ok', 'va', 'dale', 'confirmar', 'confirmo', 'enviar']);
 const NO = new Set(['no', 'n', 'cancelar', 'cancela']);
 const HELP = new Set(['ayuda', 'hola', 'menu', 'help', 'buenas', 'buenos dias', 'buenas tardes']);
@@ -164,7 +168,10 @@ export function createBot({
         return reply(merchant.waId, texts.sendUnknown(charge));
       }
       db.updateCharge(charge.id, { status: 'failed', error: `${error.type ?? ''} ${error.message}`.trim() });
-      return reply(merchant.waId, texts.sendFailed(charge, peyErrorReason(error)));
+      // pey no tiene un error propio para "ese número no tiene CoDi": cuando el
+      // rechazo puede deberse al teléfono, se sugiere la liga, que no necesita CoDi.
+      const suggestLink = Boolean(publicBaseUrl) && MAYBE_NO_CODI.has(error.type);
+      return reply(merchant.waId, texts.sendFailed(charge, peyErrorReason(error), { suggestLink }));
     }
     return reply(merchant.waId, texts.sent(charge, MIN_EXPIRATION_SECONDS / 60));
   }

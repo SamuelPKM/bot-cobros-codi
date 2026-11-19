@@ -135,6 +135,35 @@ describe('bot', () => {
       assert.equal(lastCharge().status, 'failed');
       assert.match(whatsapp.last(), /No se pudo enviar el cobro/);
       assert.match(whatsapp.last(), /todavía no está activa en CoDi/);
+      // El problema es la cuenta del comerciante, no el cliente: no se sugiere la liga.
+      assert.doesNotMatch(whatsapp.last(), /no tiene CoDi activo/);
+    });
+
+    it('si el rechazo puede ser porque el cliente no tiene CoDi, sugiere la liga con el mismo monto y concepto', async () => {
+      await say('cobra 150 a 5512345678 corte de pelo');
+      pey.fail = new PeyError('phone not registered', { status: 400, type: 'BAD_REQUEST' });
+      await say('sí');
+
+      assert.match(whatsapp.last(), /No se pudo enviar el cobro de \$150\.00/);
+      assert.match(whatsapp.last(), /Si tu cliente no tiene CoDi activo, mándale una liga de pago, que también acepta tarjeta: \*liga 150 corte de pelo\*/);
+    });
+
+    it('la liga sugerida conserva los centavos y funciona sin concepto', async () => {
+      await say('cobra 80.50 a 5512345678');
+      pey.fail = new PeyError('rechazado', { status: 400, type: 'INVALID_REQUEST' });
+      await say('sí');
+      assert.match(whatsapp.last(), /\*liga 80\.50\*/);
+
+      await say('liga 80.50');
+      assert.equal(pey.links.at(-1).amount, 80.5);
+    });
+
+    it('sin ligas configuradas no sugiere la liga', async () => {
+      bot = makeBot({ publicBaseUrl: null });
+      await say('cobra 150 a 5512345678 corte');
+      pey.fail = new PeyError('rechazado', { status: 400, type: 'BAD_REQUEST' });
+      await say('sí');
+      assert.doesNotMatch(whatsapp.last(), /liga/);
     });
 
     it('si se corta la conexión, queda en "unknown" y pide no repetirlo', async () => {
@@ -226,7 +255,9 @@ describe('bot', () => {
 
       assert.equal(lastCharge().status, 'expired');
       assert.match(whatsapp.last(), /⏰ El cobro de \$150\.00 al 55 1234 5678 por "corte" expiró/);
+      assert.match(whatsapp.last(), /Si tu cliente no tiene CoDi activo, no le llegó la solicitud/);
       assert.match(whatsapp.last(), /Responde \*liga\*/);
+      assert.match(whatsapp.last(), /también acepta tarjeta/);
     });
 
     it('avisa de la expiración una sola vez', async () => {
