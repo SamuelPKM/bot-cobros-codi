@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "build": "node --disable-warning=ExperimentalWarning scripts/check.js",
     "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env src/server.js",
     "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch src/server.js",
     "push": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/push.js",

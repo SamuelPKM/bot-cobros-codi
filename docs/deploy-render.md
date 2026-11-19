@@ -26,6 +26,22 @@ Costo: unos $7 USD al mes del plan Starter más $0.25 del disco. Confírmalo en 
     - `PEY_WEBHOOK_SECRET`: déjalo vacío por ahora; se llena en el paso 4.
 4. Da clic en **Apply**. El primer despliegue tarda unos minutos.
 
+### Si creaste el servicio a mano, sin el Blueprint
+
+Revisa en el servicio > **Settings** que tenga esto. Si falta alguno, el despliegue falla o pierde los datos:
+
+| Campo | Valor |
+| --- | --- |
+| Runtime | Node |
+| Build Command | `npm ci --omit=dev && npm run build` |
+| Start Command | `npm start` |
+| Instance Type | Starter (el gratis no admite discos) |
+| Health Check Path | `/health` |
+| Disk | 1 GB, Mount Path `/var/data` |
+| Variables | `PEY_API_KEY`, `PEY_WEBHOOK_SECRET`, `DATABASE_FILE=/var/data/cobros.db`, `DEMO_ENABLED=true`, `DEMO_MAX_AMOUNT=1`, `DEMO_MERCHANT_NAME=Negocio de prueba`, `TRUST_PROXY=true` |
+
+`npm run build` no compila nada: revisa que la versión de Node sea la correcta y que el código cargue. Si dice que la versión de Node es vieja, revisa que el repo tenga el archivo `.node-version`.
+
 ## 3. Revisar que funciona
 
 En el servicio `cobrale` está tu URL, por ejemplo `https://cobrale.onrender.com`. Si el nombre ya está ocupado, Render le agrega un sufijo.
