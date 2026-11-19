@@ -4,12 +4,12 @@ import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import { createApp } from '../src/app.js';
 import { createBot } from '../src/bot.js';
-import { openDb } from '../src/db.js';
-import { createRateLimiter } from '../src/demo.js';
+import { createCharges } from '../src/charges.js';
 import { createOutbox } from '../src/outbox.js';
-import { fakeClock, fakePey, silentLog } from './helpers.js';
+import { fakePey, freshStore, silentLog } from './helpers.js';
 
-const DEMO = { merchantName: 'Negocio <de> prueba', maxAmountCents: 100, maxChargesPerHour: 10, maxPushesPerPayerPerHour: 3 };
+const DEMO = { merchantName: 'Negocio <de> prueba' };
+const LIMITS = { maxAmountCents: 100, maxChargesPerHour: 10, maxPushesPerPayerPerHour: 3 };
 
 describe('demo web', () => {
   let server;
@@ -21,7 +21,7 @@ describe('demo web', () => {
     const app = createApp({
       peyWebhookSecret: 'whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw',
       pey: proxy('pey'),
-      db: proxy('db'),
+      store: proxy('store'),
       demo: {
         onMessage: (message) => state.bot.handleMessage(message),
         merchantName: DEMO.merchantName,
@@ -37,19 +37,20 @@ describe('demo web', () => {
 
   after(() => server.close());
 
-  beforeEach(() => {
-    state.db = openDb(':memory:');
+  beforeEach(async () => {
+    state.store = await freshStore();
     state.pey = fakePey();
-    state.bot = createBot({
-      db: state.db,
+    const outbox = createOutbox({ store: state.store, log: silentLog });
+    state.charges = createCharges({
+      store: state.store,
       pey: state.pey,
-      outbox: createOutbox({ db: state.db, log: silentLog }),
-      merchants: new Map(),
+      outbox,
+      limits: LIMITS,
       publicBaseUrl: 'https://bot.example.com',
-      demo: DEMO,
       renderQr: async () => Buffer.from('png-falso'),
       log: silentLog,
     });
+    state.bot = createBot({ store: state.store, charges: state.charges, outbox, demo: DEMO, log: silentLog });
   });
 
   async function newSession() {
@@ -110,9 +111,9 @@ describe('demo web', () => {
     assert.equal(state.pey.pushes[0].concept, 'Negocio <de> prueba: prueba');
 
     // Llega el pago (como lo haría el webhook) y el aviso aparece en la conversación.
-    const charge = state.db.getChargeByTransactionId('TX1');
-    state.db.markPaid(charge.id, { paidVia: 'push' });
-    await state.bot.notifyPaid(state.db.getCharge(charge.id));
+    const charge = await state.store.getChargeByTransactionId('TX1');
+    await state.store.markPaid(charge.id, { paidVia: 'push' });
+    await state.charges.notifyPaid(await state.store.getCharge(charge.id));
     const later = await read(session, messages.at(-1).id);
     assert.match(later.at(-1).body, /✅ Pagado: \$0\.01 al 55 1234 5678/);
   });
@@ -169,20 +170,5 @@ describe('demo web', () => {
     const statuses = [];
     for (let i = 0; i < 21; i += 1) statuses.push((await fetch(`${base}/demo/api/session`, { method: 'POST' })).status);
     assert.equal(statuses.at(-1), 429);
-  });
-});
-
-describe('createRateLimiter', () => {
-  it('deja pasar hasta el límite dentro de la ventana y se recupera después', () => {
-    const now = fakeClock();
-    const limiter = createRateLimiter({ limit: 2, windowMs: 1000, now });
-
-    assert.equal(limiter.allow('a'), true);
-    assert.equal(limiter.allow('a'), true);
-    assert.equal(limiter.allow('a'), false);
-    assert.equal(limiter.allow('b'), true);
-
-    now.advance(1001);
-    assert.equal(limiter.allow('a'), true);
   });
 });

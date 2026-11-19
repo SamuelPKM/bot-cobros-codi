@@ -13,10 +13,13 @@
     "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch src/server.js",
     "push": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/push.js",
     "tx": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/tx.js",
-    "test": "node --disable-warning=ExperimentalWarning --test"
+    "test": "node --disable-warning=ExperimentalWarning --test",
+    "test:postgres": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "express": "^5.2.1",
+    "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "standardwebhooks": "^1.1.1"
   }

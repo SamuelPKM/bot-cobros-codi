@@ -5,7 +5,7 @@
 //  - en la demo web: `to` es "demo:<sesión>", y la respuesta se guarda en la
 //    conversación de esa sesión, que la página va leyendo.
 
-export function createOutbox({ db, whatsapp = null, log = console }) {
+export function createOutbox({ store, whatsapp = null, log = console }) {
   const demoSession = (to) => (String(to).startsWith('demo:') ? String(to).slice('demo:'.length) : null);
 
   function whatsappOrLog() {
@@ -24,13 +24,13 @@ export function createOutbox({ db, whatsapp = null, log = console }) {
   return {
     async sendText(to, body) {
       const session = demoSession(to);
-      if (session) return db.addDemoMessage(session, 'bot', { body });
+      if (session) return store.addDemoMessage(session, 'bot', { body });
       return whatsappOrLog().sendText(to, body);
     },
 
     async sendImage(to, { png, caption }) {
       const session = demoSession(to);
-      if (session) return db.addDemoMessage(session, 'bot', { body: caption ?? null, imagePng: png.toString('base64') });
+      if (session) return store.addDemoMessage(session, 'bot', { body: caption ?? null, imagePng: png.toString('base64') });
       return whatsappOrLog().sendImage(to, { png, caption });
     },
   };

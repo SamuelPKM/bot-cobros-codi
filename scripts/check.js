@@ -10,12 +10,19 @@ if (major < 22 || (major === 22 && minor < 5)) {
   process.exit(1);
 }
 
-const modules = ['app', 'bot', 'command', 'config', 'db', 'demo', 'messages', 'outbox', 'pey', 'whatsapp'];
+const modules = [
+  'app', 'bot', 'charges', 'clabe', 'command', 'config', 'demo', 'messages', 'outbox', 'pey', 'sweeper', 'whatsapp',
+  'db/connection', 'db/schema', 'db/store', 'web/auth', 'web/routes', 'web/views',
+];
 for (const name of modules) {
   await import(`../src/${name}.js`);
 }
 
-const { openDb } = await import('../src/db.js');
-openDb(':memory:').close();
+// Las migraciones corren completas en un Postgres en memoria.
+const { connect } = await import('../src/db/connection.js');
+const { migrate } = await import('../src/db/schema.js');
+const db = await connect();
+await migrate(db);
+await db.close();
 
 console.log(`Build listo: Node.js ${process.versions.node}, ${modules.length} módulos cargan bien.`);

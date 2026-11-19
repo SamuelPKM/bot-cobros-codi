@@ -151,6 +151,21 @@ export function createPeyClient({ apiKey, baseUrl = 'https://api.pey.mx', fetchI
       return request('POST', '/codi/qr', body);
     },
 
+    /**
+     * POST /bank-account — registra la CLABE de un comerciante para recibir CoDi.
+     * Devuelve { id, codiStatus }. Banxico la valida en hasta 5 días hábiles.
+     */
+    async registerBankAccount({ alias, name, clabe, entity }) {
+      if (!/^[0-9]{18}$/.test(clabe ?? '')) throw new PeyError('La CLABE debe tener 18 dígitos', { type: 'INVALID_CLABE' });
+      if (!['BUSINESS', 'PERSON'].includes(entity)) throw new PeyError('entity debe ser BUSINESS o PERSON', { type: 'INVALID_PARAMETER' });
+      return request('POST', '/bank-account', { alias, name, clabe, entity });
+    },
+
+    /** GET /bank-account/{id} — estado de una cuenta: PENDING, PROCESSING, ACTIVE o ERROR. */
+    async getBankAccount(id) {
+      return request('GET', `/bank-account/${encodeURIComponent(id)}`);
+    },
+
     /** GET /transaction/codi/qr/{id} — pagos recibidos por un QR (la primera página basta: 20). */
     async listQrTransactions(qrId) {
       const page = await request('GET', `/transaction/codi/qr/${encodeURIComponent(qrId)}`);

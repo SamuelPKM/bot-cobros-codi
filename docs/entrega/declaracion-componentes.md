@@ -21,7 +21,10 @@ Desde el 14 de noviembre de 2026:
 - Liga de pago directa, sin necesitar el teléfono del cliente.
 - Demo web pública con límites de uso, que usa el mismo asistente que WhatsApp.
 - Envío de imágenes por WhatsApp.
-- Migración de la base de datos para los nuevos tipos de cobro.
+- Web completa: página de inicio, cuentas de comerciante (registro, inicio de sesión), panel de cobros en vivo, exportación a CSV y ajustes.
+- Registro de la CLABE de cada comerciante en pey, con cobros a su propia cuenta y modo prueba mientras Banxico la valida.
+- Vinculación de WhatsApp a una cuenta con código.
+- Base de datos en Postgres, preparada para varias instancias (sesiones, límites y barrido compartidos).
 - Pruebas automáticas de todo lo anterior.
 - [Agregar aquí lo que se haga después: primer cobro real, conexión con la app de Meta, prueba con un negocio, etc.]
 
@@ -31,8 +34,12 @@ Desde el 14 de noviembre de 2026:
 | --- | --- | --- |
 | [API de pey](https://docs.pey.mx) | Cobros CoDi por push, QR y liga de pago; webhooks de pago | Términos y condiciones del API de pey |
 | WhatsApp Cloud API (Meta) | Recibir y mandar mensajes del comerciante | Términos de Meta para WhatsApp Business |
-| [Node.js](https://nodejs.org) 22, incluido su módulo `node:sqlite` | Entorno de ejecución y base de datos | MIT |
+| [Node.js](https://nodejs.org) 22 | Entorno de ejecución | MIT |
 | [Express](https://expressjs.com) 5 | Servidor HTTP | MIT |
+| [node-postgres (`pg`)](https://node-postgres.com) | Conexión a Postgres | MIT |
+| [PGlite](https://pglite.dev) | Postgres dentro de Node para desarrollo y pruebas | Apache-2.0 |
+| [Neon](https://neon.tech) | Postgres administrado (servicio) | Términos de Neon |
+| [Render](https://render.com) | Hospedaje del servidor (servicio) | Términos de Render |
 | [standardwebhooks](https://www.npmjs.com/package/standardwebhooks) | Verificar la firma de los webhooks de pey | MIT |
 | [qrcode](https://www.npmjs.com/package/qrcode) | Dibujar la imagen del QR CoDi | MIT |
 

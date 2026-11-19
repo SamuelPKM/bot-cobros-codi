@@ -25,6 +25,8 @@ const bodyText = (req) => (Buffer.isBuffer(req.body) ? req.body.toString('utf8')
  * @param whatsapp Opcional: { appSecret, verifyToken, onMessage }. Sin él solo
  *   se monta el webhook de pey (suficiente para el primer cobro real).
  * @param demo Opcional: { onMessage, merchantName, maxAmount }. Monta la demo web pública en /demo.
+ * @param web Opcional: función que recibe la app y monta la web (inicio, cuentas y panel).
+ * @param onBankAccountUpdated Se llama con el evento bank.account.updated; devuelve el resultado.
  * @param trustProxy Detrás de un proxy (casi cualquier hosting), para que los
  *   límites por IP vean la IP real del visitante.
  * @param onPaid Se llama con el cobro cuando queda pagado; debe avisar al comerciante.
@@ -32,10 +34,12 @@ const bodyText = (req) => (Buffer.isBuffer(req.body) ? req.body.toString('utf8')
 export function createApp({
   peyWebhookSecret = null,
   pey,
-  db,
+  store,
   onPaid = async () => {},
+  onBankAccountUpdated = async () => 'ignored',
   whatsapp = null,
   demo = null,
+  web = null,
   trustProxy = false,
   now = Date.now,
   log = console,
@@ -50,9 +54,9 @@ export function createApp({
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
   if (demo) {
-    app.get('/', (_req, res) => res.redirect('/demo'));
+    if (!web) app.get('/', (_req, res) => res.redirect('/demo'));
     mountDemo(app, {
-      db,
+      store,
       onMessage: demo.onMessage,
       page: { merchantName: demo.merchantName, maxAmount: demo.maxAmount },
       now,
@@ -78,7 +82,7 @@ export function createApp({
     const webhookId = req.headers['webhook-id'];
     const type = event?.type;
     try {
-      const recorded = db.recordEvent('pey', webhookId, type);
+      const recorded = await store.recordEvent('pey', webhookId, type);
       if (recorded.processedAt) {
         log.info(`[pey] ${webhookId} repetido, ya procesado (${recorded.result})`);
         return res.json({ ok: true, duplicate: true });
@@ -87,8 +91,9 @@ export function createApp({
       let result = 'ignored';
       if (CODI_PAYMENT_EVENTS.has(type)) result = await processCodiPayment(event);
       else if (type === 'payment_link.status_updated') result = await processLinkUpdate(event);
+      else if (type === 'bank.account.updated') result = await onBankAccountUpdated(event);
 
-      db.markEventProcessed('pey', webhookId, result);
+      await store.markEventProcessed('pey', webhookId, result);
       log.info(`[pey] ${webhookId} ${type} -> ${result}`);
       return res.json({ ok: true, result });
     } catch (error) {
@@ -111,9 +116,9 @@ export function createApp({
     const isQr = event.type === 'codi.qr.payment_received';
     const chargeId = tx.metadata?.externalMetadata?.chargeId ?? event.metadata?.externalMetadata?.chargeId;
     const charge =
-      db.getChargeByTransactionId(transactionId) ??
-      (isQr && event.codiQrId ? db.getChargeByQrId(event.codiQrId) : null) ??
-      (chargeId ? db.getCharge(Number(chargeId)) : null);
+      (await store.getChargeByTransactionId(transactionId)) ??
+      (isQr && event.codiQrId ? await store.getChargeByQrId(event.codiQrId) : null) ??
+      (chargeId ? await store.getCharge(Number(chargeId)) : null);
     if (!charge) {
       log.warn(`[pey] pago de un cobro que no está en la base de datos: ${transactionId}`);
       return 'unknown_charge';
@@ -131,13 +136,13 @@ export function createApp({
       return 'extra_payment';
     }
 
-    const firstTime = db.markPaid(charge.id, {
+    const firstTime = await store.markPaid(charge.id, {
       paidAt: tx.datePaid ?? event.datePaid,
       trackingKey: tx.metadata?.trackingKey ?? event.metadata?.trackingKey ?? null,
       paidVia: isQr ? 'qr' : 'push',
       transactionId,
     });
-    await onPaid(db.getCharge(charge.id));
+    await onPaid(await store.getCharge(charge.id));
     return firstTime ? 'paid' : 'already_paid';
   }
 
@@ -152,7 +157,8 @@ export function createApp({
     }
 
     const reference = /^cobro-(\d+)$/.exec(link.clientReferenceId ?? '');
-    const charge = db.getChargeByLinkId(event.paymentLinkId) ?? (reference ? db.getCharge(Number(reference[1])) : null);
+    const charge =
+      (await store.getChargeByLinkId(event.paymentLinkId)) ?? (reference ? await store.getCharge(Number(reference[1])) : null);
     if (!charge) {
       log.warn(`[pey] liga pagada que no está en la base de datos: ${event.paymentLinkId}`);
       return 'unknown_charge';
@@ -167,12 +173,12 @@ export function createApp({
     }
 
     const last = transactions.at(-1);
-    const firstTime = db.markPaid(charge.id, {
+    const firstTime = await store.markPaid(charge.id, {
       paidAt: last?.datePaid,
       trackingKey: last?.metadata?.trackingKey ?? null,
       paidVia: 'link',
     });
-    await onPaid(db.getCharge(charge.id));
+    await onPaid(await store.getCharge(charge.id));
     return firstTime ? 'paid' : 'already_paid';
   }
 
@@ -220,7 +226,7 @@ export function createApp({
       // Se responde 200 pase lo que pase: un error al atender un mensaje se
       // registra, pero no se le pide a Meta que lo reenvíe.
       for (const message of messages) {
-        if (!db.claimMessage('whatsapp', message.id)) {
+        if (!(await store.claimMessage('whatsapp', message.id))) {
           log.info(`[whatsapp] ${message.id} repetido, se ignora`);
           continue;
         }
@@ -233,6 +239,10 @@ export function createApp({
       return res.sendStatus(200);
     });
   }
+
+  // La web va al final: las rutas de arriba (webhooks, demo) no pasan por sus
+  // sesiones ni cabeceras.
+  if (web) web(app);
 
   return app;
 }

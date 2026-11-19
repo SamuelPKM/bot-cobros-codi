@@ -2,10 +2,9 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { createApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
-import { openDb } from '../src/db.js';
-import { silentLog } from './helpers.js';
+import { freshStore, silentLog } from './helpers.js';
 
-const VARS = ['PEY_API_KEY', 'PEY_WEBHOOK_SECRET', 'PUBLIC_BASE_URL', 'RENDER_EXTERNAL_URL', 'DEMO_ENABLED'];
+const VARS = ['PEY_API_KEY', 'PEY_WEBHOOK_SECRET', 'PUBLIC_BASE_URL', 'RENDER_EXTERNAL_URL', 'DEMO_ENABLED', 'DATABASE_URL', 'TRUSTED_EMAILS', 'DEMO_ACCOUNT_EMAIL', 'DEMO_ACCOUNT_PASSWORD', 'DEMO_MAX_AMOUNT', 'REGISTRATION_OPEN'];
 
 describe('loadConfig', () => {
   let saved;
@@ -34,14 +33,30 @@ describe('loadConfig', () => {
 
   it('arranca sin el secreto del webhook', () => {
     const config = loadConfig();
-    assert.equal(config.peyWebhookSecret, undefined);
+    assert.equal(config.peyWebhookSecret, null);
     assert.equal(config.publicBaseUrl, null);
+  });
+
+  it('lee la base, las cuentas de confianza, la cuenta del jurado y los límites', () => {
+    process.env.DATABASE_URL = 'postgres://u:p@neon.example/db?sslmode=require';
+    process.env.TRUSTED_EMAILS = 'yo@cobrale.mx, socia@cobrale.mx';
+    process.env.DEMO_ACCOUNT_EMAIL = 'jurado@cobrale.mx';
+    process.env.DEMO_ACCOUNT_PASSWORD = 'clave-larga';
+    process.env.DEMO_MAX_AMOUNT = '2.5';
+    process.env.REGISTRATION_OPEN = 'false';
+    const config = loadConfig();
+    assert.equal(config.databaseUrl, 'postgres://u:p@neon.example/db?sslmode=require');
+    assert.deepEqual(config.web.trustedEmails, ['yo@cobrale.mx', 'socia@cobrale.mx']);
+    assert.deepEqual(config.web.demoAccount, { email: 'jurado@cobrale.mx', password: 'clave-larga' });
+    assert.equal(config.limits.maxAmountCents, 250);
+    assert.equal(config.web.registrationOpen, false);
+    assert.equal(config.demo, null);
   });
 });
 
 describe('servidor sin secreto del webhook', () => {
   it('responde la salud y contesta 503 al webhook de pey hasta que se configure', async () => {
-    const app = createApp({ pey: {}, db: openDb(':memory:'), log: silentLog });
+    const app = createApp({ pey: {}, store: await freshStore(), log: silentLog });
     const server = await new Promise((resolve) => {
       const s = app.listen(0, () => resolve(s));
     });

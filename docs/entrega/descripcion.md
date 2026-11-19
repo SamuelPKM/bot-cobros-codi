@@ -6,25 +6,28 @@
 
 ## El problema
 
-Quien vive de su oficio (una barbería, una fonda, un plomero, una tienda de barrio) cobra casi siempre en efectivo o con transferencias que tiene que revisar a mano. Las terminales cobran comisión y renta, y las apps de cobro piden instalar algo más y aprender a usarlo. CoDi resuelve el pago (sin comisión, instantáneo y desde la app del banco), pero cobrar con CoDi todavía no es tan fácil como mandar un mensaje.
+Quien vive de su oficio (una barbería, una fonda, un plomero) cobra casi siempre en efectivo o con transferencias que revisa a mano. Las terminales cobran comisión y renta, y las apps de cobro piden instalar algo más. CoDi resuelve el pago (sin comisión, instantáneo, desde el banco), pero cobrar con CoDi todavía no es tan fácil como mandar un mensaje.
 
 ## Qué hace
 
-Cóbrale es un asistente de chat. El comerciante escribe como le escribiría a alguien:
+Cóbrale es un asistente de chat con una web sencilla detrás. El comerciante escribe como le escribiría a alguien:
 
 > cobra 150 a 5512345678 corte de pelo
 
 El asistente le muestra el cobro, pide un "sí" y manda la solicitud de pago CoDi al celular del cliente. Cuando el cliente aprueba el pago en la app de su banco, el comerciante recibe "✅ Pagado", con la clave de rastreo de Banxico.
 
-Si el comerciante no tiene el teléfono del cliente, escribe `qr 150 corte` y recibe un código QR para que el cliente lo escanee en el mostrador, o `liga 150 corte` y recibe una liga de pago para mandarla por donde quiera. Si un cobro al celular expira, el asistente ofrece la liga como plan B. Con `resumen` ve lo que cobró en el día y lo que sigue pendiente.
+Sin el teléfono del cliente, escribe `qr 150 corte` y recibe un QR para el mostrador, o `liga 150 corte` y recibe una liga de pago para mandarla por donde quiera. Si un cobro al celular expira, el asistente ofrece la liga como plan B. Con `resumen` ve lo que cobró en el día y lo que sigue pendiente.
+
+Lo mismo puede hacerlo desde la web: un panel con los cobros del día que se actualizan solos, el QR o la liga de cada cobro, y exportación a CSV. En Ajustes liga su WhatsApp y registra su CLABE, para que los pagos le lleguen directo a su cuenta.
 
 ## Cómo usa el API de pey
 
 - **Push CoDi** (`POST /codi/pn`) para cobrar al celular del cliente.
 - **QR CoDi** (`POST /codi/qr`) para cobrar en persona.
 - **Ligas de pago** (`POST /payment-link/create`) como alternativa sin teléfono, con CoDi o tarjeta.
-- **Webhooks firmados** (`codi.pn.payment_received`, `codi.qr.payment_received`, `payment_link.status_updated`), verificados con Standard Webhooks, para avisar del pago en el momento.
-- **Consulta de transacciones** (`GET /transaction/{id}` y `GET /transaction/codi/qr/{id}`) para confirmar cada pago contra el API antes de avisar, y para no dar por expirado un cobro que sí se pagó.
+- **Cuentas bancarias** (`POST /bank-account`) para que cada comerciante reciba en su propia CLABE: sus push y QR se crean con su `bankAccountId`.
+- **Webhooks firmados** (`codi.pn.payment_received`, `codi.qr.payment_received`, `payment_link.status_updated`, `bank.account.updated`), verificados con Standard Webhooks, para avisar del pago en el momento.
+- **Consulta de transacciones** (`GET /transaction/{id}`, `GET /transaction/codi/qr/{id}`) para confirmar cada pago antes de avisar, y no dar por expirado un cobro que sí se pagó.
 
 Cada cobro lleva su identificador en `metadata`, así un pago se liga a su cobro aunque se pierda una respuesta de red. Como el API no tiene llave de idempotencia, el asistente nunca reintenta un cobro por su cuenta: prefiere avisar al comerciante antes que mandarle dos cobros a su cliente.
 
@@ -34,4 +37,4 @@ El comerciante no instala nada ni aprende una app: usa el chat que ya usa todo e
 
 ## Demo
 
-La demo pública usa el mismo asistente, en una página web, con cobros reales de hasta $1.00: [URL DE LA DEMO]
+La demo pública usa el mismo asistente, en una página web, con cobros reales de hasta $1.00: [URL]/demo. El panel se prueba con la cuenta de prueba de las instrucciones.

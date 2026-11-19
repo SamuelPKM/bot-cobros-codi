@@ -1,38 +1,49 @@
-# Desplegar Cóbrale en Render (plan gratis)
+# Desplegar Cóbrale en Render con Postgres en Neon
 
-El archivo [`render.yaml`](../render.yaml) es un *Blueprint*: Render lo lee y crea en un solo paso el servicio web con sus variables de entorno.
+Las dos partes son gratis:
+
+- **Render** corre el servidor. El archivo [`render.yaml`](../render.yaml) es un *Blueprint* que crea el servicio con sus variables.
+- **Neon** guarda los datos en Postgres. Así no se pierden en cada despliegue, y el servicio puede tener varias instancias.
 
 | Recurso | Configuración |
 | --- | --- |
-| Servicio | Web Service `cobrale`, plan Free, región Virginia |
+| Servicio | Web Service `cobrale` en Render, plan Free, región Virginia |
+| Base de datos | Postgres en Neon, región AWS us-east-1 (Virginia) |
 | Node.js | Versión 22, fijada en `.node-version` |
 | Despliegues | Automáticos con cada commit a `main` |
-| Salud | Render revisa `/health` |
 
-## Lo que implica el plan gratis
+## Límites de los planes gratis
 
-- **Se apaga tras 15 minutos sin visitas** y tarda alrededor de un minuto en despertar. Se evita con un despertador externo (paso 4).
-- **La base de datos se borra en cada despliegue o reinicio**, porque el plan gratis no admite discos. Se pierden las conversaciones de la demo, el historial del resumen y los cobros que estuvieran pendientes en ese momento. Los pagos ya hechos no se pierden: siguen en pey.
-- **Render da 750 horas gratis al mes** por cuenta. Un servicio encendido todo el mes usa unas 744, así que alcanza solo si es el único servicio gratis activo de la cuenta.
+- **Render Free se apaga tras 15 minutos sin visitas** y tarda alrededor de un minuto en despertar. Se evita con un despertador externo (paso 5). Render da 750 horas al mes: alcanza si es el único servicio gratis activo de la cuenta.
+- **Neon Free da 100 horas de cómputo al mes** y duerme la base tras 5 minutos sin consultas. Cóbrale solo consulta la base cuando hace falta: al vencer un cobro, cuando alguien usa la web o la demo, y una revisión cada 30 minutos. El despertador visita `/health`, que no toca la base, así que no la mantiene despierta.
 
-Para que la demo quede estable al final, no despliegues nada después de congelar cambios (12 de diciembre).
+## 1. Crear la base en Neon
 
-## 1. Darle a Render acceso al repositorio
+1. Crea una cuenta en neon.tech y un proyecto nuevo (`cobrale`), en la región **AWS US East (N. Virginia)**, la misma de Render.
+2. En el panel del proyecto, da clic en **Connect**.
+3. **Desactiva "Connection pooling"** y copia la cadena de conexión. Empieza con `postgresql://` y su host **no** debe decir `-pooler`. Cóbrale usa candados de Postgres que no funcionan a través del pooler.
+
+No hace falta crear tablas: Cóbrale las crea solo al arrancar.
+
+## 2. Darle a Render acceso al repositorio
 
 El repositorio `bot-cobros-codi` es privado y está en la cuenta de GitHub `SamuelPKM`.
 
-1. En dashboard.render.com: **New > Blueprint**. Ojo: no "Web Service", porque esa opción no lee `render.yaml`.
-2. Si `bot-cobros-codi` no aparece, da clic en **Configure GitHub** (o **Connect account**).
-3. En GitHub, con la sesión de `SamuelPKM`, instala Render en la cuenta **SamuelPKM**. Elige **Only select repositories**, marca `bot-cobros-codi` y da clic en **Install**.
+1. En dashboard.render.com: **New > Blueprint**. No uses "Web Service": esa opción no lee `render.yaml`.
+2. Si `bot-cobros-codi` no aparece, da clic en **Configure GitHub** e instala Render en la cuenta **SamuelPKM**, con acceso a `bot-cobros-codi`.
 
-## 2. Aplicar el Blueprint
+## 3. Aplicar el Blueprint
 
 1. Elige `bot-cobros-codi`, rama `main`. En **Blueprint Path** debe decir `render.yaml`.
-2. En **Blueprint Name** escribe `cobrale`. Render muestra que va a crear el servicio `cobrale` en plan Free.
-3. Llena las variables:
-    - `PEY_API_KEY`: una API key nueva de portal.pey.mx, no una que hayas compartido por chat.
-    - `PEY_WEBHOOK_SECRET`: déjalo vacío por ahora; se llena en el paso 5.
-4. Da clic en **Apply**. El primer despliegue tarda unos minutos.
+2. Llena las variables:
+    - `PEY_API_KEY`: una API key nueva de portal.pey.mx.
+    - `DATABASE_URL`: la cadena de Neon del paso 1.
+    - `DEMO_ACCOUNT_EMAIL` y `DEMO_ACCOUNT_PASSWORD`: la cuenta con la que entrará el jurado a la web, por ejemplo `jurado@cobrale.mx` y una contraseña de al menos 10 caracteres. Van en las instrucciones de prueba.
+    - `TRUSTED_EMAILS`: tu correo, si quieres cobrar sin el límite del modo prueba mientras Banxico valida tu CLABE.
+    - `PEY_WEBHOOK_SECRET`: déjalo vacío por ahora; se llena en el paso 6.
+3. Da clic en **Apply**.
+
+**Si ya habías creado el servicio** con una versión anterior del Blueprint, agrega esas variables a mano en el servicio > **Environment**. La más importante es `DATABASE_URL`.
 
 ### Si creaste el servicio a mano, sin el Blueprint
 
@@ -44,39 +55,34 @@ En el servicio > **Settings**:
 | Branch | `main` |
 | Build Command | `npm ci --omit=dev && npm run build` |
 | Start Command | `npm start` |
-| Instance Type | Free |
 | Health Check Path | `/health` |
-| Variables | `PEY_API_KEY`, `PEY_WEBHOOK_SECRET`, `DATABASE_FILE=data/cobros.db`, `DEMO_ENABLED=true`, `DEMO_MAX_AMOUNT=1`, `DEMO_MERCHANT_NAME=Negocio de prueba`, `TRUST_PROXY=true` |
+| Variables | `PEY_API_KEY`, `DATABASE_URL`, `PEY_WEBHOOK_SECRET`, `DEMO_ENABLED=true`, `DEMO_MAX_AMOUNT=1`, `DEMO_MERCHANT_NAME=Negocio de prueba`, `TRUST_PROXY=true`, y opcionalmente `DEMO_ACCOUNT_EMAIL`, `DEMO_ACCOUNT_PASSWORD` y `TRUSTED_EMAILS` |
 
-`npm run build` no compila nada: revisa que la versión de Node sea la correcta y que el código cargue. Si dice que la versión de Node es vieja, revisa que el repo tenga el archivo `.node-version`.
+## 4. Revisar que funciona
 
-## 3. Revisar que funciona
+En el servicio `cobrale` está tu URL, por ejemplo `https://cobrale.onrender.com`.
 
-En el servicio `cobrale` está tu URL, por ejemplo `https://cobrale.onrender.com`. Si el nombre ya está ocupado, Render le agrega un sufijo.
+- `https://<tu-url>/health` responde `{"ok":true}`.
+- `https://<tu-url>/` muestra la página de inicio, y `/demo` la demo.
+- En **Logs** aparece `Base de datos: Postgres (DATABASE_URL)`. Si dice `PGlite`, falta `DATABASE_URL`: los datos se borrarían en cada despliegue.
 
-- `https://<tu-url>/health` debe responder `{"ok":true}`.
-- `https://<tu-url>/demo` debe mostrar la demo.
+## 5. Mantener despierto el servicio
 
-En **Logs** debe aparecer `Webhook de pey: sin configurar`. Es lo esperado hasta el paso 5.
+En cron-job.org o UptimeRobot (gratis), crea una tarea que visite `https://<tu-url>/health` **cada 10 minutos**. UptimeRobot además te avisa por correo si el servicio se cae.
 
-## 4. Mantenerlo despierto
-
-Con cualquiera de estos servicios gratuitos, crea un monitor o tarea que visite `https://<tu-url>/health` **cada 10 minutos**:
-
-- **cron-job.org**: **Create cronjob**, pon la URL y en el horario elige "Every 10 minutes".
-- **UptimeRobot**: **Add New Monitor** de tipo HTTP(s), con un intervalo de 10 minutos. Además te avisa por correo si el servicio se cae.
-
-## 5. Conectar el webhook de pey
+## 6. Conectar el webhook de pey
 
 1. En portal.pey.mx > **Desarrollador**, en el engrane de tu API key, crea el webhook con la URL `https://<tu-url>/webhooks/pey`.
-2. Copia el secreto, que empieza con `whsec_`. Solo se muestra una vez.
+2. Copia el secreto (`whsec_...`); solo se muestra una vez.
 3. En Render, servicio `cobrale` > **Environment**: pon el secreto en `PEY_WEBHOOK_SECRET` y da clic en **Save**. Render vuelve a desplegar solo.
 
-En **Logs** debe aparecer ahora `Webhook de pey: POST /webhooks/pey`.
+El mismo webhook avisa cuando una CLABE de un comerciante queda activa (`bank.account.updated`).
 
-## 6. Primer cobro real
+## 7. Primer cobro real
 
-Abre `https://<tu-url>/demo`, escribe `cobra 0.01 a <tu celular> prueba`, responde `sí` y aprueba el pago en la app de tu banco. El aviso "✅ Pagado" aparece en la demo.
+1. Abre `https://<tu-url>/registro` y crea tu cuenta.
+2. En el panel, crea un cobro **Al celular** de $0.01 a tu número, da clic en **Enviar cobro** y apruébalo en la app de tu banco.
+3. El estado cambia a **Pagado** solo, sin recargar.
 
 Si no llega, revisa **Logs** en Render y **Webhook Logs** en portal.pey.mx.
 
@@ -84,8 +90,9 @@ Si no llega, revisa **Logs** en Render y **Webhook Logs** en portal.pey.mx.
 
 | Para | Dónde |
 | --- | --- |
-| Desplegar una nueva versión | Haz push a `main`; Render despliega solo (y la base empieza de cero) |
-| Cambiar secretos o el monto de la demo | Servicio > **Environment** (también reinicia y borra la base) |
+| Desplegar una nueva versión | Push a `main`; Render despliega solo |
+| Cambiar secretos o límites | Servicio > **Environment** |
 | Ver los registros | Servicio > **Logs** |
-| Activar WhatsApp | En **Environment**, agrega `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` y `MERCHANTS` (ver el README) |
-| Pasar a un plan de pago con disco | Instance Type Starter, agrega un disco en `/var/data` y cambia `DATABASE_FILE=/var/data/cobros.db` |
+| Ver o respaldar los datos | Neon > **Tables** o **SQL Editor**; Neon guarda historial para restaurar |
+| Más instancias | Plan de pago de Render > **Scaling**. Cóbrale ya está listo: todo el estado vive en Postgres |
+| Activar WhatsApp | Variables `WHATSAPP_*` (ver el README) |

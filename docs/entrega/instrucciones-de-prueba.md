@@ -1,76 +1,67 @@
 # Instrucciones para probar el proyecto
 
-> Borrador. Antes de entregar, cambia `[URL DE LA DEMO]` por la dirección real y revisa que sigan siendo menos de 1000 palabras.
+> Borrador. Antes de entregar, cambia `[URL]`, `[CORREO DE PRUEBA]` y `[CONTRASEÑA DE PRUEBA]` por los reales y revisa que sigan siendo menos de 1000 palabras.
 
-Cóbrale es un asistente de chat para que un negocio cobre con CoDi escribiendo un mensaje, como lo haría por WhatsApp. Se prueba en la demo web pública, sin cuenta ni invitación.
+Cóbrale permite a un negocio cobrar con CoDi escribiendo un mensaje o desde una web sencilla. Se prueba sin instalar nada, de dos formas: en el **panel web** con una cuenta de prueba, o en la **demo de chat**, que funciona igual que el bot de WhatsApp.
 
-**Demo pública:** [URL DE LA DEMO]
+- **Sitio:** [URL]
+- **Cuenta de prueba del panel:** [CORREO DE PRUEBA] / [CONTRASEÑA DE PRUEBA]
+- **Demo de chat, sin cuenta:** [URL]/demo
 
 ## Antes de empezar
 
-- Los cobros son **reales**: usan el ambiente productivo de pey. El dinero llega a la cuenta del proyecto y no se devuelve, así que prueba con **$0.01**. La demo no acepta más de $1.00 por cobro.
-- Para el cobro por celular necesitas un número con CoDi activo en la app de tu banco.
-- Para el QR necesitas una app bancaria que escanee códigos CoDi. Si solo tienes un dispositivo, abre la demo en una computadora y escanea con tu celular.
+- Los cobros son **reales**: usan el ambiente productivo de pey. El dinero llega a la cuenta del proyecto y no se devuelve, así que prueba con **$0.01**. La cuenta de prueba y la demo no aceptan más de $1.00 por cobro.
+- Para el cobro al celular necesitas un número con CoDi activo en la app de tu banco.
+- Para el QR necesitas una app bancaria que escanee códigos CoDi. Si solo tienes un dispositivo, abre el sitio en una computadora y escanea con tu celular.
 
-En la demo tú eres el comerciante, "Negocio de prueba". Tu cliente puedes ser tú mismo.
+## A. Panel web (cuenta de prueba)
 
-## Prueba 1: cobro al celular (push CoDi)
+1. Entra a [URL], da clic en **Entrar** y usa la cuenta de prueba.
+2. **Cobro al celular.** En "Nuevo cobro" elige "Al celular de mi cliente", escribe `0.01`, un concepto y tu celular. Da clic en **Continuar**: Cóbrale te muestra el resumen y todavía no envía nada. Da clic en **Enviar cobro**. Te llega la solicitud a la app de tu banco; apruébala. En unos segundos la página cambia sola a **Pagado**, con la clave de rastreo de Banxico.
+3. **QR.** Elige "Con QR", `0.01` y **Continuar**. Aparece el QR, vigente 15 minutos. Escanéalo con tu banco y paga: la página cambia sola a **Pagado**.
+4. **Liga de pago.** Elige "Con liga de pago", `0.01` y **Continuar**. Copia la liga, ábrela y paga con CoDi o con tarjeta.
+5. **Panel.** En **Cobros** ves lo cobrado hoy, lo pendiente y la lista de cobros, que se actualiza sola. **Descargar CSV** exporta todos los cobros.
+6. **Ajustes.** Ahí el comerciante cambia el nombre que ve su cliente en el banco, liga su WhatsApp y registra su CLABE para que los pagos le lleguen directo. La CLABE se valida con el dígito verificador y luego con Banxico, en hasta 5 días hábiles. Por eso la cuenta de prueba no tiene CLABE propia.
 
-1. Abre la demo. El asistente te saluda y te explica qué puedes hacer.
-2. Escribe `cobra 0.01 a <tu celular de 10 dígitos> prueba` y envíalo. El asistente te muestra el cobro y pide confirmación; todavía no envía nada.
-3. Responde `sí`. Te llega una notificación de cobro CoDi a la app de tu banco, con el concepto "Negocio de prueba: prueba". Tienes 6 minutos para aprobarla.
-4. Aprueba el pago en tu banco. En unos segundos aparece en la demo: **"✅ Pagado: $0.01 al … por "prueba""**, con la clave de rastreo de Banxico.
+También puedes crear tu propia cuenta en **Crear cuenta**. Mientras no tenga CLABE validada, queda en el mismo modo prueba.
 
-Si respondes `no` en el paso 3, el cobro se cancela y no se envía nada. Si dejas pasar los 6 minutos, el asistente avisa que el cobro expiró y ofrece una liga de pago: responde `liga`.
+## B. Demo de chat (sin cuenta)
 
-## Prueba 2: cobro con QR
-
-1. Escribe `qr 0.01 prueba`.
-2. El asistente te muestra un código QR CoDi, vigente por 15 minutos.
-3. Escanéalo con la app de tu banco y paga.
-4. Aparece **"✅ Pagado: $0.01 con QR por "prueba""** en la conversación.
-
-## Prueba 3: liga de pago
-
-1. Escribe `liga 0.01 prueba`.
-2. El asistente te da una liga de pago de pey. Es lo que el comerciante reenvía a su cliente por cualquier medio, sin necesitar su teléfono.
-3. Abre la liga y paga con CoDi o con tarjeta.
-4. Aparece **"✅ Pagado"** en la conversación.
-
-## Prueba 4: resumen del día
-
-Escribe `resumen`. El asistente muestra cuánto se cobró hoy, qué cobros siguen pendientes y cuántos expiraron.
-
-## Qué más puedes probar
+Abre [URL]/demo. Ahí tú eres el comerciante "Negocio de prueba" y escribes como lo harías por WhatsApp:
 
 | Escribe | Qué pasa |
 | --- | --- |
+| `cobra 0.01 a <tu celular> prueba` | Muestra el cobro y pide confirmación |
+| `sí` | Te llega la solicitud a tu banco; al pagar aparece "✅ Pagado" en el chat |
+| `qr 0.01 prueba` | Muestra un QR para escanear |
+| `liga 0.01 prueba` | Da una liga de pago |
+| `resumen` | Lo cobrado hoy y lo pendiente |
 | `ayuda` | La lista de comandos |
-| `cobra 0.01 a 12345 prueba` | Explica que el teléfono debe tener 10 dígitos |
-| `cobra 5 a <tu celular> prueba` | Explica el monto máximo de la demo |
-| `cobra 0.01 al +52 1 55 1234 5678 prueba` | Entiende teléfonos con lada, espacios y el prefijo de WhatsApp |
-| `sí` dos veces seguidas | El segundo no manda otro cobro |
 
-Tu conversación se guarda en ese navegador: si recargas la página, sigue ahí.
+Si un cobro al celular vence sin pagarse, el asistente avisa y ofrece una liga, que no necesita CoDi: responde `liga`. Tu conversación se guarda en ese navegador.
 
-## Cómo funciona por dentro
+## Qué más puedes probar
 
-- **Push CoDi:** `POST /codi/pn` con el teléfono del cliente y 6 minutos de vigencia.
-- **QR CoDi:** `POST /codi/qr` con 15 minutos de vigencia. El servidor dibuja el QR con el `qrString` tal cual lo entrega pey.
+- Un monto mayor a $1.00: se rechaza con una explicación del modo prueba.
+- Un teléfono con lada o espacios (`+52 1 55 1234 5678`): se entiende igual.
+- Enviar dos veces la confirmación: no se manda un segundo cobro.
+- En el panel, abrir el enlace de un cobro de otra cuenta: no se muestra.
+
+## Cómo usa el API de pey
+
+- **Push CoDi:** `POST /codi/pn`, con 6 minutos de vigencia.
+- **QR CoDi:** `POST /codi/qr`, con 15 minutos de vigencia. El servidor dibuja el QR con el `qrString` tal cual lo entrega pey.
 - **Liga de pago:** `POST /payment-link/create`.
-- **Confirmación del pago:** pey avisa por webhook (`codi.pn.payment_received`, `codi.qr.payment_received` o `payment_link.status_updated`). El servidor verifica la firma con Standard Webhooks y confirma el pago contra la API (`GET /transaction/{id}` o `GET /payment-link/{id}`) antes de avisar.
-- **Si el webhook no llega:** al vencer un cobro, el servidor consulta la API antes de marcarlo como expirado.
+- **CLABE de cada comerciante:** `POST /bank-account` y `GET /bank-account/{id}`. Con la cuenta activa, los push y QR se crean con su `bankAccountId` y el dinero le llega directo.
+- **Confirmación del pago:** webhooks firmados (`codi.pn.payment_received`, `codi.qr.payment_received`, `payment_link.status_updated`, `bank.account.updated`), verificados con Standard Webhooks. Antes de avisar, el servidor confirma cada pago contra la API (`GET /transaction/{id}`, `GET /payment-link/{id}`).
+- **Si un webhook no llega:** al vencer un cobro, el servidor consulta la API (`GET /transaction/{id}` o `GET /transaction/codi/qr/{id}`) antes de darlo por expirado.
 
-Cada cobro lleva su identificador interno en `metadata`, para ligar el pago aunque se pierda una respuesta. La demo usa el mismo asistente que atiende a los comerciantes por WhatsApp; solo cambia el canal.
-
-## Límites de la demo
-
-Para que nadie la use para molestar a terceros, la demo limita el monto a $1.00 por cobro, 10 cobros por hora por visitante y 3 cobros por hora a un mismo celular.
+Cada cobro lleva su identificador interno en `metadata`, para ligar el pago aunque se pierda una respuesta. El panel, el bot de WhatsApp y la demo usan el mismo núcleo de cobros.
 
 ## Si algo no funciona
 
-- **No te llega la notificación:** revisa que tu número tenga CoDi activo en tu banco. Puedes probar con el QR o la liga, que no lo necesitan.
-- **El aviso de pago tarda:** puede tardar unos segundos en llegar. Si pasa el tiempo de vigencia, el servidor lo confirma con la API.
-- **Llegaste a un límite:** espera una hora o abre la demo en otro navegador.
+- **No te llega la notificación:** revisa que tu número tenga CoDi activo, o prueba con QR o liga.
+- **El servicio tarda en abrir:** puede estar despertando; espera unos segundos.
+- **Llegaste a un límite:** el modo prueba permite 10 cobros por hora y 3 cobros por hora a un mismo celular. Espera una hora.
 
 Repositorio: [ENLACE AL REPOSITORIO, opcional]

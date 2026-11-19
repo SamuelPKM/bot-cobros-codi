@@ -18,37 +18,20 @@ const SESSION_ID = /^[a-f0-9]{32}$/;
 const MAX_TEXT_LENGTH = 300;
 const HOUR_MS = 60 * 60 * 1000;
 
-/** Ventana deslizante en memoria: cuántas veces pasó algo por clave en `windowMs`. */
-export function createRateLimiter({ limit, windowMs, now = Date.now }) {
-  const hits = new Map();
-  return {
-    allow(key) {
-      const since = now() - windowMs;
-      const recent = (hits.get(key) ?? []).filter((t) => t > since);
-      if (recent.length >= limit) {
-        hits.set(key, recent);
-        return false;
-      }
-      recent.push(now());
-      hits.set(key, recent);
-      if (hits.size > 10_000) {
-        for (const [k, times] of hits) if (times.every((t) => t <= since)) hits.delete(k);
-      }
-      return true;
-    },
-  };
-}
+const TEN_MINUTES = 10 * 60 * 1000;
 
 /**
  * @param page Variables que se insertan en la página: { merchantName, maxAmount }.
  */
-export function mountDemo(app, { db, onMessage, page, now = Date.now, log = console }) {
+export function mountDemo(app, { store, onMessage, page, now = Date.now, log = console }) {
   const html = PAGE.replaceAll('{{MERCHANT_NAME}}', escapeHtml(page.merchantName)).replaceAll(
     '{{MAX_AMOUNT}}',
     escapeHtml(page.maxAmount),
   );
-  const messagesPerSession = createRateLimiter({ limit: 30, windowMs: 10 * 60 * 1000, now });
-  const messagesPerIp = createRateLimiter({ limit: 120, windowMs: 10 * 60 * 1000, now });
+  // Los límites viven en la base, para que valgan igual con varias instancias.
+  const allowMessage = async (session, ip) =>
+    (await store.hit(`demo-msg:${session}`, { limit: 30, windowMs: TEN_MINUTES })) &&
+    (await store.hit(`demo-msg-ip:${ip}`, { limit: 120, windowMs: TEN_MINUTES }));
   const json = express.json({ limit: '4kb' });
 
   app.get('/demo', (_req, res) => {
@@ -60,19 +43,19 @@ export function mountDemo(app, { db, onMessage, page, now = Date.now, log = cons
       .send(html);
   });
 
-  app.post('/demo/api/session', (req, res) => {
-    if (db.countDemoSessionsByIp(req.ip, now() - HOUR_MS) >= 20) {
+  app.post('/demo/api/session', async (req, res) => {
+    if ((await store.countDemoSessionsByIp(req.ip, now() - HOUR_MS)) >= 20) {
       return res.status(429).json({ error: 'Demasiadas sesiones nuevas desde esta conexión. Intenta en una hora.' });
     }
     const sessionId = randomBytes(16).toString('hex');
-    db.createDemoSession(sessionId, req.ip);
-    db.addDemoMessage(sessionId, 'bot', { body: welcome(page) });
+    await store.createDemoSession(sessionId, req.ip);
+    await store.addDemoMessage(sessionId, 'bot', { body: welcome(page) });
     return res.status(201).json({ sessionId });
   });
 
-  function session(req, res) {
+  async function session(req, res) {
     const id = req.get('x-demo-session');
-    if (!id || !SESSION_ID.test(id) || !db.demoSessionExists(id)) {
+    if (!id || !SESSION_ID.test(id) || !(await store.demoSessionExists(id))) {
       res.status(401).json({ error: 'Sesión de demo inválida. Recarga la página.' });
       return null;
     }
@@ -92,14 +75,16 @@ export function mountDemo(app, { db, onMessage, page, now = Date.now, log = cons
       image: m.imagePng ? `data:image/png;base64,${m.imagePng}` : null,
     }));
 
-  app.get('/demo/api/messages', (req, res) => {
-    const id = session(req, res);
+  app.get('/demo/api/messages', async (req, res) => {
+    const id = await session(req, res);
     if (!id) return undefined;
-    return res.set('Cache-Control', 'no-store').json({ messages: present(db.listDemoMessages(id, after(req.query.after))) });
+    return res
+      .set('Cache-Control', 'no-store')
+      .json({ messages: present(await store.listDemoMessages(id, after(req.query.after))) });
   });
 
   app.post('/demo/api/messages', json, async (req, res) => {
-    const id = session(req, res);
+    const id = await session(req, res);
     if (!id) return undefined;
 
     const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
@@ -107,18 +92,20 @@ export function mountDemo(app, { db, onMessage, page, now = Date.now, log = cons
     if (text.length > MAX_TEXT_LENGTH) {
       return res.status(400).json({ error: `El mensaje puede tener hasta ${MAX_TEXT_LENGTH} caracteres.` });
     }
-    if (!messagesPerSession.allow(id) || !messagesPerIp.allow(req.ip)) {
+    if (!(await allowMessage(id, req.ip))) {
       return res.status(429).json({ error: 'Vas muy rápido. Espera unos minutos.' });
     }
 
-    db.addDemoMessage(id, 'user', { body: text });
+    await store.addDemoMessage(id, 'user', { body: text });
     try {
       await onMessage({ from: `demo:${id}`, text });
     } catch (error) {
       log.error(`[demo] ${id} falló: ${error.message}`);
-      db.addDemoMessage(id, 'bot', { body: 'Algo salió mal de mi lado. Intenta de nuevo en un momento.' });
+      await store.addDemoMessage(id, 'bot', { body: 'Algo salió mal de mi lado. Intenta de nuevo en un momento.' });
     }
-    return res.set('Cache-Control', 'no-store').json({ messages: present(db.listDemoMessages(id, after(req.body?.after))) });
+    return res
+      .set('Cache-Control', 'no-store')
+      .json({ messages: present(await store.listDemoMessages(id, after(req.body?.after))) });
   });
 }
 

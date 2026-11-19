@@ -1,13 +1,9 @@
 # Blueprint de Render para Cóbrale: https://render.com/docs/blueprint-spec
 #
-# Crea un Web Service en el plan gratis. Los secretos no van aquí: Render los
-# pide al aplicar el Blueprint (los que tienen `sync: false`).
-#
-# Límites del plan gratis que hay que conocer (detalle en docs/deploy-render.md):
-#   - Se apaga tras 15 minutos sin visitas. Un "despertador" externo que visite
-#     /health cada 10 minutos lo mantiene encendido.
-#   - No admite discos: la base de datos SQLite se borra en cada despliegue o
-#     reinicio.
+# Crea un Web Service en el plan gratis. Los datos viven en Postgres (Neon,
+# también gratis), así que no se pierden en cada despliegue y el servicio puede
+# tener varias instancias. Los secretos no van aquí: Render los pide al aplicar
+# el Blueprint (los que tienen `sync: false`).
 #
 # Guía paso a paso: docs/deploy-render.md
 
@@ -16,7 +12,8 @@ services:
     name: cobrale
     runtime: node
     plan: free
-    # La región no se puede cambiar después de crear el servicio.
+    # La región no se puede cambiar después de crear el servicio. Conviene la
+    # misma zona que la base de Neon (AWS us-east-1).
     region: virginia
     branch: main
     buildCommand: npm ci --omit=dev && npm run build
@@ -30,11 +27,19 @@ services:
       # primer despliegue. Puede quedar vacío mientras tanto.
       - key: PEY_WEBHOOK_SECRET
         sync: false
+      # Cadena de conexión directa de Neon (sin "-pooler").
+      - key: DATABASE_URL
+        sync: false
+      # Cuenta de la web para el jurado (opcional).
+      - key: DEMO_ACCOUNT_EMAIL
+        sync: false
+      - key: DEMO_ACCOUNT_PASSWORD
+        sync: false
+      # Correos que cobran sin el límite del modo prueba (opcional).
+      - key: TRUSTED_EMAILS
+        sync: false
 
       # --- Configuración ---
-      # Sin disco, la base vive en el sistema de archivos temporal del servicio.
-      - key: DATABASE_FILE
-        value: data/cobros.db
       - key: DEMO_ENABLED
         value: "true"
       - key: DEMO_MAX_AMOUNT

@@ -1,24 +1,13 @@
-// Lógica del bot: qué hacer con cada mensaje del comerciante y con cada pago.
+// Canal de chat: WhatsApp y la demo web pública. Traduce cada mensaje a una
+// operación del núcleo de cobros (charges.js) y responde con texto.
 //
-// No sabe nada de HTTP: recibe la base de datos, el cliente de pey y un
-// `outbox` para responder (WhatsApp, o la conversación de la demo web), así que
-// se puede probar completo con dobles.
+// Un número de WhatsApp cobra a nombre del comerciante al que está ligado.
+// Para ligarlo, el comerciante genera un código en la web (Ajustes) y manda
+// "vincular <código>" desde su WhatsApp: así se comprueba que el número es suyo.
 
-import QRCode from 'qrcode';
 import { normalizePhone, parseAmountCommand, parseCommand } from './command.js';
-import { payerConcept, peyErrorReason, texts } from './messages.js';
-import { MIN_EXPIRATION_SECONDS, toCents } from './pey.js';
-
-const CONFIRMATION_WINDOW_MS = 10 * 60 * 1000; // tiempo para responder "sí"
-const LINK_WINDOW_MS = 24 * 60 * 60 * 1000; // tiempo para pedir la liga de un cobro expirado
-const EXPIRATION_GRACE_MS = 20 * 1000; // margen por si el webhook de pago viene en camino
-const HOUR_MS = 60 * 60 * 1000;
-export const QR_EXPIRATION_SECONDS = 15 * 60;
-const TIME_ZONE = 'America/Mexico_City';
-
-// Rechazos de pey que pueden venir de que el cliente no tiene CoDi. No incluye los
-// que son del comerciante o del servicio (cuenta inactiva, mantenimiento, monto).
-const MAYBE_NO_CODI = new Set(['BAD_REQUEST', 'INVALID_REQUEST', 'INVALID_PARAMETER', 'PEY_CONSISTENCY_ERROR', 'UNKNOWN']);
+import { texts } from './messages.js';
+import { toCents } from './pey.js';
 
 const YES = new Set(['si', 's', 'ok', 'va', 'dale', 'confirmar', 'confirmo', 'enviar']);
 const NO = new Set(['no', 'n', 'cancelar', 'cancela']);
@@ -35,326 +24,76 @@ function simplify(text) {
     .trim();
 }
 
-function dayKey(ms) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(new Date(ms));
-}
-
-/** PNG del QR, como recomienda pey: corrección de errores M, negro sobre blanco, borde 4. */
-export function renderQrPng(qrString) {
-  return QRCode.toBuffer(qrString, { type: 'png', errorCorrectionLevel: 'M', margin: 4, scale: 10 });
-}
-
 /**
- * @param outbox { sendText(to, body), sendImage(to, { png, caption }) }.
- * @param merchants Map de teléfono (10 dígitos) -> nombre del negocio. Solo
- *   estos números pueden mandar cobros por WhatsApp.
- * @param publicBaseUrl URL pública HTTPS del servidor; hace falta para las ligas.
- * @param demo Opcional: { merchantName, maxAmountCents, maxChargesPerHour,
- *   maxPushesPerPayerPerHour }. Activa a los comerciantes de la demo web
- *   (los que escriben desde "demo:<sesión>") con esos límites.
+ * @param demo Opcional: { merchantName }. Activa a quienes escriben desde
+ *   "demo:<sesión>" (la demo web), siempre en modo prueba.
+ * @param webUrl URL de la web, para decirle a un número sin cuenta dónde registrarse.
  */
-export function createBot({
-  db,
-  pey,
-  outbox,
-  merchants,
-  publicBaseUrl = null,
-  demo = null,
-  renderQr = renderQrPng,
-  now = Date.now,
-  log = console,
-}) {
-  async function reply(to, body) {
-    await outbox.sendText(to, body);
-  }
+export function createBot({ store, charges, outbox, demo = null, webUrl = null, log = console }) {
+  const reply = (to, body) => (body ? outbox.sendText(to, body) : undefined);
 
-  function resolveMerchant(from) {
+  /** El contexto de cobro de quien escribe, o null si no puede cobrar. */
+  async function contextFor(from) {
     if (demo && String(from).startsWith('demo:')) {
-      return { phone: from, waId: from, name: demo.merchantName, isDemo: true };
+      return charges.contextFor(null, {
+        channel: 'demo',
+        notifyTo: from,
+        demoSession: String(from).slice('demo:'.length),
+        demoName: demo.merchantName,
+      });
     }
     const phone = normalizePhone(from);
-    const name = phone ? merchants.get(phone) : undefined;
-    return name ? { phone, waId: from, name, isDemo: false } : null;
+    const merchant = phone ? await store.getMerchantByWhatsapp(phone) : null;
+    return merchant ? charges.contextFor(merchant, { channel: 'whatsapp', notifyTo: from }) : null;
   }
 
   async function handleMessage({ from, text }) {
-    const merchant = resolveMerchant(from);
-    if (!merchant) return reply(from, texts.notRegistered());
-    if (text === null) return reply(from, texts.onlyText());
-
     const simple = simplify(text);
 
-    if (YES.has(simple)) return confirm(merchant);
-    if (NO.has(simple)) return cancel(merchant);
-    if (simple === 'liga') return sendLinkForExpired(merchant);
-    if (simple === 'resumen' || simple === 'pendientes') return summary(merchant);
-    if (HELP.has(simple)) return reply(merchant.waId, texts.help());
-    if (/^cobra/.test(simple)) return draft(merchant, text);
-    if (/^(liga|qr)( |$)/.test(simple)) return chargeWithoutPhone(merchant, text);
-    return reply(merchant.waId, texts.notUnderstood());
-  }
-
-  /**
-   * Límites de la demo pública: monto máximo, cobros por hora de cada sesión
-   * y push por hora a un mismo teléfono, para que nadie la use para molestar.
-   * Devuelve el texto del rechazo, o null si se puede seguir.
-   */
-  function demoLimit(merchant, { amountCents, payerPhone = null }) {
-    if (!merchant.isDemo) return null;
-    if (amountCents !== undefined && amountCents > demo.maxAmountCents) return texts.demoAmountLimit(demo.maxAmountCents);
-    if (db.countSentByMerchant(merchant.phone, now() - HOUR_MS) >= demo.maxChargesPerHour) return texts.demoTooMany();
-    if (payerPhone && db.countPushesToPayer(payerPhone, now() - HOUR_MS) >= demo.maxPushesPerPayerPerHour) {
-      return texts.payerTooMany(payerPhone);
+    // "vincular 123456" funciona aunque el número todavía no tenga cuenta.
+    const link = /^vincular (\d{6})$/.exec(simple);
+    const phone = normalizePhone(from);
+    if (link && phone) {
+      const merchant = await store.linkWhatsapp(link[1], phone);
+      return reply(from, merchant ? texts.linked(merchant) : texts.linkCodeInvalid());
     }
-    return null;
+
+    const ctx = await contextFor(from);
+    if (!ctx) return reply(from, texts.notRegistered(webUrl));
+    if (text === null) return reply(from, texts.onlyText());
+
+    if (YES.has(simple)) return reply(from, (await charges.confirmPush(ctx)).message);
+    if (NO.has(simple)) return reply(from, (await charges.cancelPush(ctx)).message);
+    if (simple === 'liga') return reply(from, (await charges.linkForExpired(ctx)).message);
+    if (simple === 'resumen' || simple === 'pendientes') return reply(from, texts.summary(await charges.summary(ctx)));
+    if (HELP.has(simple)) return reply(from, texts.help());
+    if (/^cobra/.test(simple)) return draft(ctx, from, text);
+    if (/^(liga|qr)( |$)/.test(simple)) return withoutPhone(ctx, from, text);
+    return reply(from, texts.notUnderstood());
   }
 
-  /** "cobra 150 a 55..." -> guarda el cobro y pide confirmación. Todavía no cobra nada. */
-  async function draft(merchant, text) {
+  async function draft(ctx, from, text) {
     const parsed = parseCommand(text);
-    if (!parsed.ok) return reply(merchant.waId, parsed.error);
-
-    const amountCents = toCents(parsed.amount);
-    const limited = demoLimit(merchant, { amountCents, payerPhone: parsed.phoneNumber });
-    if (limited) return reply(merchant.waId, limited);
-
-    db.cancelAwaiting(merchant.phone);
-    const charge = db.createCharge({
-      kind: 'push',
-      merchantPhone: merchant.phone,
-      merchantWaId: merchant.waId,
+    if (!parsed.ok) return reply(from, parsed.error);
+    const result = await charges.draftPush(ctx, {
+      amountCents: toCents(parsed.amount),
       payerPhone: parsed.phoneNumber,
-      amountCents,
       concept: parsed.concept,
-      status: 'awaiting_confirmation',
     });
-    return reply(merchant.waId, texts.confirmPrompt(charge));
+    return reply(from, result.message);
   }
 
-  /** "sí" -> manda el push CoDi del cobro que estaba por confirmar. */
-  async function confirm(merchant) {
-    const charge = db.latestCharge(merchant.phone, ['awaiting_confirmation']);
-    if (!charge) return reply(merchant.waId, texts.nothingToConfirm());
-
-    if (now() - charge.createdAt > CONFIRMATION_WINDOW_MS) {
-      db.transition(charge.id, 'awaiting_confirmation', 'cancelled');
-      return reply(merchant.waId, texts.confirmationExpired());
-    }
-    // Los límites se revisan otra vez: entre el borrador y el "sí" pudieron salir otros cobros.
-    const limited = demoLimit(merchant, { payerPhone: charge.payerPhone });
-    if (limited) {
-      db.transition(charge.id, 'awaiting_confirmation', 'cancelled');
-      return reply(merchant.waId, limited);
-    }
-    // Si otro "sí" ya lo tomó, este no hace nada: nunca dos cobros por un mensaje repetido.
-    if (!db.transition(charge.id, 'awaiting_confirmation', 'sending')) return undefined;
-
-    const expiresAt = now() + MIN_EXPIRATION_SECONDS * 1000;
-    try {
-      const { transactionId, codiId } = await pey.createPush({
-        amount: charge.amountCents / 100,
-        phoneNumber: charge.payerPhone,
-        concept: payerConcept(merchant.name, charge.concept),
-        expiration: MIN_EXPIRATION_SECONDS,
-        numRef: String(charge.id % 10_000_000),
-        metadata: { chargeId: String(charge.id) },
-      });
-      db.updateCharge(charge.id, { status: 'pending', transactionId, codiId, expiresAt });
-    } catch (error) {
-      logPeyError(charge, 'el push', error);
-      if (error.type === 'TIMEOUT' || error.type === 'NETWORK_ERROR') {
-        // No se sabe si pey lo envió. Si se paga, el webhook lo liga por metadata.chargeId.
-        db.updateCharge(charge.id, { status: 'unknown', expiresAt, error: error.message });
-        return reply(merchant.waId, texts.sendUnknown(charge));
-      }
-      db.updateCharge(charge.id, { status: 'failed', error: `${error.type ?? ''} ${error.message}`.trim() });
-      // pey no tiene un error propio para "ese número no tiene CoDi": cuando el
-      // rechazo puede deberse al teléfono, se sugiere la liga, que no necesita CoDi.
-      const suggestLink = Boolean(publicBaseUrl) && MAYBE_NO_CODI.has(error.type);
-      return reply(merchant.waId, texts.sendFailed(charge, peyErrorReason(error), { suggestLink }));
-    }
-    return reply(merchant.waId, texts.sent(charge, MIN_EXPIRATION_SECONDS / 60));
-  }
-
-  async function cancel(merchant) {
-    const charge = db.latestCharge(merchant.phone, ['awaiting_confirmation']);
-    if (!charge) return reply(merchant.waId, texts.nothingToConfirm());
-    db.transition(charge.id, 'awaiting_confirmation', 'cancelled');
-    return reply(merchant.waId, texts.cancelled(charge));
-  }
-
-  /**
-   * "liga 150 corte" o "qr 150 corte": cobros que no necesitan el teléfono del
-   * cliente. No piden confirmación porque no le llegan a nadie: el comerciante
-   * recibe la liga o el QR y decide a quién mostrarlo.
-   */
-  async function chargeWithoutPhone(merchant, text) {
+  /** "liga 150 corte" o "qr 150 corte": no piden confirmación porque no le llegan a nadie. */
+  async function withoutPhone(ctx, from, text) {
     const parsed = parseAmountCommand(text);
-    if (!parsed.ok) return reply(merchant.waId, parsed.error);
-    if (parsed.kind === 'link' && !publicBaseUrl) return reply(merchant.waId, texts.linkUnavailable());
+    if (!parsed.ok) return reply(from, parsed.error);
+    const input = { amountCents: toCents(parsed.amount), concept: parsed.concept };
+    if (parsed.kind === 'link') return reply(from, (await charges.createLink(ctx, input)).message);
 
-    const amountCents = toCents(parsed.amount);
-    const limited = demoLimit(merchant, { amountCents });
-    if (limited) return reply(merchant.waId, limited);
-
-    const charge = db.createCharge({
-      kind: parsed.kind,
-      merchantPhone: merchant.phone,
-      merchantWaId: merchant.waId,
-      amountCents,
-      concept: parsed.concept,
-      status: 'creating',
-    });
-    return parsed.kind === 'qr' ? createQr(merchant, charge) : createDirectLink(merchant, charge);
+    const result = await charges.createQr(ctx, input);
+    if (!result.ok) return reply(from, result.message);
+    return outbox.sendImage(from, { png: result.png, caption: result.message });
   }
 
-  async function createDirectLink(merchant, charge) {
-    try {
-      const { id, url } = await pey.createPaymentLink({
-        amount: charge.amountCents / 100,
-        successUrl: `${publicBaseUrl}/pago/gracias`,
-        backUrl: `${publicBaseUrl}/pago/cancelado`,
-        clientReferenceId: `cobro-${charge.id}`,
-        metadata: { chargeId: String(charge.id) },
-      });
-      const updated = db.updateCharge(charge.id, { status: 'link', linkId: id, linkUrl: url });
-      return reply(merchant.waId, texts.directLink(updated));
-    } catch (error) {
-      logPeyError(charge, 'la liga', error);
-      db.updateCharge(charge.id, { status: 'failed', error: `${error.type ?? ''} ${error.message}`.trim() });
-      return reply(merchant.waId, texts.directLinkFailed(charge, peyErrorReason(error)));
-    }
-  }
-
-  async function createQr(merchant, charge) {
-    let png;
-    try {
-      const qr = await pey.createQr({
-        amount: charge.amountCents / 100,
-        concept: payerConcept(merchant.name, charge.concept),
-        expiration: QR_EXPIRATION_SECONDS,
-        numRef: String(charge.id % 10_000_000),
-        metadata: { chargeId: String(charge.id) },
-      });
-      // El qrString se codifica tal cual: pey pide no parsearlo ni reformatearlo.
-      png = await renderQr(qr.qrString);
-      db.updateCharge(charge.id, { status: 'qr', qrId: qr.id, expiresAt: now() + QR_EXPIRATION_SECONDS * 1000 });
-    } catch (error) {
-      logPeyError(charge, 'el QR', error);
-      db.updateCharge(charge.id, { status: 'failed', error: `${error.type ?? ''} ${error.message}`.trim() });
-      return reply(merchant.waId, texts.qrFailed(charge, peyErrorReason(error)));
-    }
-    return outbox.sendImage(merchant.waId, { png, caption: texts.qrCaption(charge, QR_EXPIRATION_SECONDS / 60) });
-  }
-
-  /** "liga" sola -> plan B: liga de pago para el último push que expiró. */
-  async function sendLinkForExpired(merchant) {
-    if (!publicBaseUrl) return reply(merchant.waId, texts.linkUnavailable());
-
-    const charge = db.latestCharge(merchant.phone, ['expired']);
-    if (!charge || charge.kind !== 'push' || now() - charge.createdAt > LINK_WINDOW_MS) {
-      return reply(merchant.waId, texts.noExpiredCharge());
-    }
-    if (!db.transition(charge.id, 'expired', 'link_creating')) return undefined;
-
-    try {
-      const { id, url } = await pey.createPaymentLink({
-        amount: charge.amountCents / 100,
-        successUrl: `${publicBaseUrl}/pago/gracias`,
-        backUrl: `${publicBaseUrl}/pago/cancelado`,
-        clientReferenceId: `cobro-${charge.id}`,
-        metadata: { chargeId: String(charge.id) },
-      });
-      const updated = db.updateCharge(charge.id, { status: 'link', linkId: id, linkUrl: url });
-      return reply(merchant.waId, texts.link(updated));
-    } catch (error) {
-      logPeyError(charge, 'la liga', error);
-      db.transition(charge.id, 'link_creating', 'expired');
-      return reply(merchant.waId, texts.linkFailed(charge));
-    }
-  }
-
-  async function summary(merchant) {
-    const today = dayKey(now());
-    const charges = db
-      .listSince(merchant.phone, now() - 36 * 60 * 60 * 1000)
-      .filter((charge) => dayKey(charge.createdAt) === today);
-    return reply(
-      merchant.waId,
-      texts.summary({
-        paid: charges.filter((c) => c.status === 'paid'),
-        pending: charges.filter((c) => ['pending', 'unknown', 'link', 'qr'].includes(c.status)),
-        expiredCount: charges.filter((c) => c.status === 'expired').length,
-      }),
-    );
-  }
-
-  /**
-   * Avisa "Pagado" al comerciante. Si el envío falla lanza el error y el cobro
-   * queda sin `notifiedAt`, para que `sweep` lo vuelva a intentar.
-   */
-  async function notifyPaid(charge) {
-    if (charge.notifiedAt) return;
-    if (charge.merchantWaId) await reply(charge.merchantWaId, texts.paid(charge));
-    else log.info(`[bot] pagado el cobro ${charge.id} (sin comerciante a quien avisar)`);
-    db.updateCharge(charge.id, { notifiedAt: now() });
-  }
-
-  /** Busca en la API si un cobro vencido sí se pagó. Devuelve la transacción pagada o null. */
-  async function findPayment(charge) {
-    if (charge.kind === 'qr' && charge.qrId) {
-      const items = await pey.listQrTransactions(charge.qrId);
-      return items.find((tx) => tx.status === 'PAID') ?? null;
-    }
-    if (charge.transactionId) {
-      const tx = await pey.getTransaction(charge.transactionId);
-      return tx.status === 'PAID' ? tx : null;
-    }
-    return null;
-  }
-
-  /**
-   * Tarea periódica:
-   *  - marca como expirados los push y QR cuyo plazo venció, confirmando antes
-   *    con la API que de verdad no se pagaron;
-   *  - reintenta los avisos de "Pagado" que no se pudieron entregar.
-   */
-  async function sweep() {
-    for (const charge of db.listDue(now() - EXPIRATION_GRACE_MS)) {
-      try {
-        const tx = await findPayment(charge);
-        if (tx) {
-          db.markPaid(charge.id, {
-            paidAt: tx.datePaid,
-            trackingKey: tx.metadata?.trackingKey ?? null,
-            paidVia: charge.kind,
-            transactionId: tx.id ?? null,
-          });
-          await notifyPaid(db.getCharge(charge.id));
-          continue;
-        }
-        if (!db.transition(charge.id, charge.status, 'expired')) continue;
-        const canLink = charge.kind === 'push' && Boolean(publicBaseUrl);
-        if (charge.merchantWaId) await reply(charge.merchantWaId, texts.expired(charge, canLink));
-      } catch (error) {
-        // Se queda como estaba; el siguiente barrido lo vuelve a intentar.
-        log.error(`[bot] cobro ${charge.id}: no se pudo revisar la expiración: ${error.message}`);
-      }
-    }
-
-    for (const charge of db.listPaidNotNotified()) {
-      try {
-        await notifyPaid(charge);
-      } catch (error) {
-        log.error(`[bot] cobro ${charge.id}: no se pudo avisar del pago: ${error.message}`);
-      }
-    }
-  }
-
-  function logPeyError(charge, what, error) {
-    const requestId = error.requestId ? ` requestId=${error.requestId}` : '';
-    log.error(`[bot] cobro ${charge.id}: falló ${what} (${error.type ?? error.name}): ${error.message}${requestId}`);
-  }
-
-  return { handleMessage, notifyPaid, sweep };
+  return { handleMessage, log };
 }

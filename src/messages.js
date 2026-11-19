@@ -63,8 +63,26 @@ export const texts = {
 
   notUnderstood: () => `No entendí el mensaje.\n\n${HELP}`,
 
-  notRegistered: () =>
-    'Este número no está registrado como comerciante, así que no puedo mandar cobros desde aquí.',
+  notRegistered: (webUrl) =>
+    webUrl
+      ? `Este número todavía no está ligado a una cuenta de Cóbrale. Crea tu cuenta en ${webUrl} y, en Ajustes, sigue los pasos para ligar tu WhatsApp.`
+      : 'Este número todavía no está ligado a una cuenta de Cóbrale.',
+
+  linked: (merchant) =>
+    `Listo, este WhatsApp quedó ligado a *${merchant.businessName}*. Ya puedes cobrar desde aquí.\n\n${HELP}`,
+
+  linkCodeInvalid: () => 'Ese código no es válido o ya venció. Genera uno nuevo en Ajustes de tu cuenta de Cóbrale.',
+
+  invalidClabe: () => 'La CLABE no es válida: deben ser 18 dígitos y el último es un dígito verificador. Revísala en tu estado de cuenta.',
+
+  missingHolder: () => 'Escribe el nombre del titular de la cuenta, tal como aparece en el banco.',
+
+  missingEntity: () => 'Elige si la cuenta es de una persona física o de una empresa.',
+
+  bankRegistered: () =>
+    'Listo, registramos tu CLABE. Banxico la valida en hasta 5 días hábiles; mientras tanto sigues en modo prueba y los cobros llegan a la cuenta del proyecto.',
+
+  bankFailed: (reason) => `No pudimos registrar tu CLABE. ${reason}`,
 
   onlyText: () => `Solo entiendo mensajes de texto.\n\n${HELP}`,
 
@@ -159,10 +177,10 @@ export const texts = {
   directLinkFailed: (charge, reason) => `No pude generar la liga de ${amountAndConcept(charge)}. ${reason}`,
 
   demoAmountLimit: (maxCents) =>
-    `En la demo pública el monto máximo es de ${money(maxCents)}. Los cobros son reales, así que prueba con $0.01.`,
+    `En modo prueba el monto máximo es de ${money(maxCents)} por cobro. Los cobros son reales, así que prueba con $0.01. Para cobrar más, registra tu propia CLABE.`,
 
   demoTooMany: () =>
-    'Llegaste al límite de cobros de la demo por ahora. Espera una hora para probar de nuevo.',
+    'Llegaste al límite de cobros por hora del modo prueba. Espera una hora para probar de nuevo.',
 
   payerTooMany: (payerPhone) =>
     `Ya se mandaron varios cobros al ${phone(payerPhone)} en la última hora. Para no molestar a esa persona, espera un rato antes de volver a intentarlo.`,

@@ -3,9 +3,8 @@ import { createHmac } from 'node:crypto';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import { Webhook } from 'standardwebhooks';
 import { createApp } from '../src/app.js';
-import { openDb } from '../src/db.js';
 import { PeyError } from '../src/pey.js';
-import { fakePey, silentLog } from './helpers.js';
+import { fakePey, freshStore, silentLog } from './helpers.js';
 
 const PEY_SECRET = 'whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw';
 const META_APP_SECRET = 'secreto-de-la-app-de-meta';
@@ -50,7 +49,8 @@ describe('servidor', () => {
     const app = createApp({
       peyWebhookSecret: PEY_SECRET,
       pey: new Proxy({}, { get: (_t, prop) => (...args) => state.pey[prop](...args) }),
-      db: new Proxy({}, { get: (_t, prop) => (...args) => state.db[prop](...args) }),
+      store: new Proxy({}, { get: (_t, prop) => (...args) => state.store[prop](...args) }),
+      onBankAccountUpdated: (event) => state.onBank(event),
       onPaid: async (charge) => {
         if (state.onPaidFails) throw new Error('WhatsApp caído');
         state.paid.push(charge);
@@ -73,8 +73,9 @@ describe('servidor', () => {
 
   after(() => server.close());
 
-  beforeEach(() => {
-    state.db = openDb(':memory:');
+  beforeEach(async () => {
+    state.store = await freshStore();
+    state.onBank = async () => 'ignored';
     state.pey = fakePey();
     state.paid = [];
     state.messages = [];
@@ -86,16 +87,17 @@ describe('servidor', () => {
 
   /** Crea un cobro ya enviado por push, como lo dejaría el bot. */
   async function pendingCharge(amount = 150) {
-    const charge = state.db.createCharge({
-      merchantPhone: '5511112222',
-      merchantWaId: '5215511112222',
+    const charge = await state.store.createCharge({
+      channel: 'whatsapp',
+      ownerKey: 'm:1',
+      notifyTo: '5215511112222',
       payerPhone: '5512345678',
       amountCents: Math.round(amount * 100),
       concept: 'corte',
       status: 'sending',
     });
     const { transactionId } = await state.pey.createPush({ amount, metadata: { chargeId: String(charge.id) } });
-    return state.db.updateCharge(charge.id, { status: 'pending', transactionId });
+    return state.store.updateCharge(charge.id, { status: 'pending', transactionId });
   }
 
   const pushPaidEvent = (transactionId, amount = 150) => ({
@@ -119,7 +121,7 @@ describe('servidor', () => {
       const res = await post('/webhooks/pey', req);
 
       assert.equal(res.status, 401);
-      assert.equal(state.db.getCharge(charge.id).status, 'pending');
+      assert.equal((await state.store.getCharge(charge.id)).status, 'pending');
     });
 
     it('rechaza con 401 otro secreto, un timestamp viejo y la falta de headers', async () => {
@@ -142,7 +144,7 @@ describe('servidor', () => {
 
       assert.equal(res.status, 200);
       assert.deepEqual(await res.json(), { ok: true, result: 'paid' });
-      const paid = state.db.getCharge(charge.id);
+      const paid = await state.store.getCharge(charge.id);
       assert.equal(paid.status, 'paid');
       assert.equal(paid.paidVia, 'push');
       assert.equal(paid.trackingKey, 'RASTREO1');
@@ -152,13 +154,13 @@ describe('servidor', () => {
     it('liga el pago por metadata.chargeId si nunca supimos el transactionId', async () => {
       const charge = await pendingCharge();
       const { transactionId } = charge;
-      state.db.updateCharge(charge.id, { status: 'unknown', transactionId: null });
+      await state.store.updateCharge(charge.id, { status: 'unknown', transactionId: null });
       state.pey.pay(transactionId);
 
       const res = await post('/webhooks/pey', peyRequest(pushPaidEvent(transactionId)));
 
       assert.equal((await res.json()).result, 'paid');
-      const paid = state.db.getCharge(charge.id);
+      const paid = await state.store.getCharge(charge.id);
       assert.equal(paid.status, 'paid');
       assert.equal(paid.transactionId, transactionId);
     });
@@ -181,7 +183,7 @@ describe('servidor', () => {
 
       const first = await post('/webhooks/pey', peyRequest(event, { id: 'msg_retry' }));
       assert.equal(first.status, 500);
-      assert.equal(state.db.getCharge(charge.id).status, 'pending');
+      assert.equal((await state.store.getCharge(charge.id)).status, 'pending');
 
       state.pey.pay(charge.transactionId);
       const retry = await post('/webhooks/pey', peyRequest(event, { id: 'msg_retry' }));
@@ -195,7 +197,7 @@ describe('servidor', () => {
       const res = await post('/webhooks/pey', peyRequest(pushPaidEvent(charge.transactionId)));
 
       assert.equal(res.status, 500);
-      assert.equal(state.db.getCharge(charge.id).status, 'pending');
+      assert.equal((await state.store.getCharge(charge.id)).status, 'pending');
     });
 
     it('si el aviso al comerciante falla responde 500, y el reintento avisa sin volver a marcar', async () => {
@@ -206,7 +208,7 @@ describe('servidor', () => {
       state.onPaidFails = true;
       const first = await post('/webhooks/pey', peyRequest(event, { id: 'msg_notify' }));
       assert.equal(first.status, 500);
-      assert.equal(state.db.getCharge(charge.id).status, 'paid'); // el pago sí quedó registrado
+      assert.equal((await state.store.getCharge(charge.id)).status, 'paid'); // el pago sí quedó registrado
 
       state.onPaidFails = false;
       const retry = await post('/webhooks/pey', peyRequest(event, { id: 'msg_notify' }));
@@ -222,7 +224,7 @@ describe('servidor', () => {
       const res = await post('/webhooks/pey', peyRequest(pushPaidEvent(charge.transactionId, 1)));
 
       assert.equal((await res.json()).result, 'amount_mismatch');
-      assert.equal(state.db.getCharge(charge.id).status, 'pending');
+      assert.equal((await state.store.getCharge(charge.id)).status, 'pending');
       assert.equal(state.paid.length, 0);
     });
 
@@ -236,24 +238,36 @@ describe('servidor', () => {
       assert.equal((await res.json()).result, 'unknown_charge');
     });
 
+    it('manda el aviso de cuenta bancaria al núcleo y guarda su resultado', async () => {
+      const seen = [];
+      state.onBank = async (event) => {
+        seen.push(event.bankAccountId);
+        return 'bank_active';
+      };
+      const res = await post('/webhooks/pey', peyRequest({ type: 'bank.account.updated', bankAccountId: 'BA1', codiStatus: 'ACTIVE' }));
+      assert.equal((await res.json()).result, 'bank_active');
+      assert.deepEqual(seen, ['BA1']);
+    });
+
     it('ignora con 200 los eventos que no son pagos', async () => {
-      const res = await post('/webhooks/pey', peyRequest({ type: 'bank.account.updated', codiStatus: 'ACTIVE' }));
+      const res = await post('/webhooks/pey', peyRequest({ type: 'customer.created' }));
       assert.equal((await res.json()).result, 'ignored');
     });
   });
 
   describe('POST /webhooks/pey: pago de un QR', () => {
     async function qrCharge(amount = 150) {
-      const charge = state.db.createCharge({
+      const charge = await state.store.createCharge({
         kind: 'qr',
-        merchantPhone: '5511112222',
-        merchantWaId: '5215511112222',
+        channel: 'whatsapp',
+        ownerKey: 'm:1',
+        notifyTo: '5215511112222',
         amountCents: Math.round(amount * 100),
         concept: 'corte',
         status: 'creating',
       });
       const qr = await state.pey.createQr({ amount, metadata: { chargeId: String(charge.id) } });
-      return state.db.updateCharge(charge.id, { status: 'qr', qrId: qr.id });
+      return state.store.updateCharge(charge.id, { status: 'qr', qrId: qr.id });
     }
 
     const qrPaidEvent = (codiQrId, transactionId, amount = 150) => ({
@@ -275,7 +289,7 @@ describe('servidor', () => {
       const res = await post('/webhooks/pey', peyRequest(qrPaidEvent(charge.qrId, transactionId)));
 
       assert.equal((await res.json()).result, 'paid');
-      const paid = state.db.getCharge(charge.id);
+      const paid = await state.store.getCharge(charge.id);
       assert.equal(paid.status, 'paid');
       assert.equal(paid.paidVia, 'qr');
       assert.equal(paid.transactionId, transactionId);
@@ -292,7 +306,7 @@ describe('servidor', () => {
       const res = await post('/webhooks/pey', peyRequest(qrPaidEvent(charge.qrId, second), { id: 'msg_q2' }));
 
       assert.equal((await res.json()).result, 'extra_payment');
-      assert.equal(state.db.getCharge(charge.id).transactionId, first);
+      assert.equal((await state.store.getCharge(charge.id)).transactionId, first);
       assert.equal(state.paid.length, 1);
     });
 
@@ -304,21 +318,22 @@ describe('servidor', () => {
       const res = await post('/webhooks/pey', peyRequest(qrPaidEvent(charge.qrId, transactionId, 1)));
 
       assert.equal((await res.json()).result, 'amount_mismatch');
-      assert.equal(state.db.getCharge(charge.id).status, 'qr');
+      assert.equal((await state.store.getCharge(charge.id)).status, 'qr');
     });
   });
 
   describe('POST /webhooks/pey: liga de pago', () => {
     async function chargeWithLink(amount = 150) {
-      const charge = state.db.createCharge({
-        merchantPhone: '5511112222',
-        merchantWaId: '5215511112222',
+      const charge = await state.store.createCharge({
+        channel: 'whatsapp',
+        ownerKey: 'm:1',
+        notifyTo: '5215511112222',
         payerPhone: '5512345678',
         amountCents: amount * 100,
         status: 'expired',
       });
       const { id, url } = await state.pey.createPaymentLink({ amount, clientReferenceId: `cobro-${charge.id}` });
-      return state.db.updateCharge(charge.id, { status: 'link', linkId: id, linkUrl: url });
+      return state.store.updateCharge(charge.id, { status: 'link', linkId: id, linkUrl: url });
     }
 
     const linkEvent = (paymentLinkId, status = 'paid') => ({
@@ -335,7 +350,7 @@ describe('servidor', () => {
       const res = await post('/webhooks/pey', peyRequest(linkEvent(charge.linkId)));
 
       assert.equal((await res.json()).result, 'paid');
-      const paid = state.db.getCharge(charge.id);
+      const paid = await state.store.getCharge(charge.id);
       assert.equal(paid.status, 'paid');
       assert.equal(paid.paidVia, 'link');
       assert.equal(state.paid.length, 1);
@@ -346,7 +361,7 @@ describe('servidor', () => {
       const res = await post('/webhooks/pey', peyRequest(linkEvent(charge.linkId, 'processing')));
 
       assert.equal((await res.json()).result, 'link_processing');
-      assert.equal(state.db.getCharge(charge.id).status, 'link');
+      assert.equal((await state.store.getCharge(charge.id)).status, 'link');
     });
 
     it('responde 500 si el webhook dice paid pero la API todavía no', async () => {
@@ -354,7 +369,7 @@ describe('servidor', () => {
       const res = await post('/webhooks/pey', peyRequest(linkEvent(charge.linkId)));
 
       assert.equal(res.status, 500);
-      assert.equal(state.db.getCharge(charge.id).status, 'link');
+      assert.equal((await state.store.getCharge(charge.id)).status, 'link');
     });
   });
 

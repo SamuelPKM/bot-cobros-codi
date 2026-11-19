@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseMerchants } from '../src/config.js';
 import { payerConcept } from '../src/messages.js';
 import { createPeyClient } from '../src/pey.js';
 import { createWhatsAppClient, WhatsAppError } from '../src/whatsapp.js';
@@ -153,18 +152,6 @@ describe('ligas de pago en el cliente de pey', () => {
 });
 
 describe('configuración', () => {
-  it('parseMerchants lee "teléfono=Nombre" separados por punto y coma', () => {
-    const merchants = parseMerchants('5511112222=Barbería Leo; +52 1 55 3333 4444 = Tacos Ana ;');
-    assert.deepEqual([...merchants], [
-      ['5511112222', 'Barbería Leo'],
-      ['5533334444', 'Tacos Ana'],
-    ]);
-  });
-
-  it('parseMerchants falla con un teléfono inválido o sin nombre', () => {
-    assert.throws(() => parseMerchants('12345=Leo'), /MERCHANTS/);
-    assert.throws(() => parseMerchants('5511112222'), /MERCHANTS/);
-  });
 
   it('payerConcept antepone el negocio y respeta el largo máximo', () => {
     assert.equal(payerConcept('Barbería Leo', 'corte'), 'Barbería Leo: corte');

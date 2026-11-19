@@ -24,8 +24,9 @@ export function normalizePhone(input) {
   return null;
 }
 
-/** Valida el texto de un monto. Devuelve { amount } o { error }. */
-function parseAmount(amountText) {
+/** Valida el texto de un monto ("150", "1,500.50", "$80"). Devuelve { amount } o { error }. */
+export function parseAmount(amountText) {
+  amountText = String(amountText ?? '').trim().replace(/^\$\s*/, '');
   if (!/^(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$/.test(amountText)) {
     return { error: `No entendí el monto "${amountText}". Usa números con máximo 2 decimales, como 150 o 150.50` };
   }

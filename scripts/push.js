@@ -1,4 +1,4 @@
-// Manda un cobro CoDi por notificación push, sin pasar por WhatsApp.
+// Manda un cobro CoDi por notificación push, sin pasar por WhatsApp ni la web.
 //
 //   npm run push -- <teléfono de 10 dígitos> [monto] [concepto]
 //   npm run push -- 5512345678                    -> cobra $0.01
@@ -8,7 +8,9 @@
 
 import { normalizePhone } from '../src/command.js';
 import { loadConfig } from '../src/config.js';
-import { openDb } from '../src/db.js';
+import { connect } from '../src/db/connection.js';
+import { migrate } from '../src/db/schema.js';
+import { createStore } from '../src/db/store.js';
 import { createPeyClient, MIN_EXPIRATION_SECONDS, PeyError, toCents } from '../src/pey.js';
 
 const [phoneArg, amountArg = '0.01', concept = 'Prueba Cóbrale'] = process.argv.slice(2);
@@ -22,9 +24,18 @@ if (!phoneNumber || !Number.isFinite(amount) || amount <= 0) {
 
 const config = loadConfig();
 const pey = createPeyClient({ apiKey: config.peyApiKey, baseUrl: config.peyBaseUrl });
-const db = openDb(config.databaseFile);
+const db = await connect({ url: config.databaseUrl, dataDir: config.databaseDir });
+await migrate(db);
+const store = createStore(db);
 
-const charge = db.createCharge({ payerPhone: phoneNumber, amountCents: toCents(amount), concept, status: 'sending' });
+const charge = await store.createCharge({
+  channel: 'script',
+  ownerKey: 'script',
+  payerPhone: phoneNumber,
+  amountCents: toCents(amount),
+  concept,
+  status: 'sending',
+});
 
 try {
   const { transactionId, codiId } = await pey.createPush({
@@ -35,7 +46,7 @@ try {
     numRef: String(charge.id % 10_000_000),
     metadata: { chargeId: String(charge.id) },
   });
-  db.updateCharge(charge.id, {
+  await store.updateCharge(charge.id, {
     status: 'pending',
     transactionId,
     codiId,
@@ -50,7 +61,7 @@ try {
 } catch (error) {
   if (!(error instanceof PeyError)) throw error;
   const uncertain = error.type === 'TIMEOUT' || error.type === 'NETWORK_ERROR';
-  db.updateCharge(charge.id, {
+  await store.updateCharge(charge.id, {
     status: uncertain ? 'unknown' : 'failed',
     error: error.message,
     expiresAt: uncertain ? Date.now() + MIN_EXPIRATION_SECONDS * 1000 : null,
@@ -60,5 +71,7 @@ try {
   console.error(`  tipo: ${error.type}${error.status ? `  HTTP ${error.status}` : ''}`);
   if (error.requestId) console.error(`  requestId: ${error.requestId}  (dáselo a soporte de pey)`);
   if (uncertain) console.error('  No lo reintentes a ciegas: el push pudo haberse enviado. Revisa primero tu celular.');
-  process.exit(1);
+  process.exitCode = 1;
+} finally {
+  await db.close();
 }
