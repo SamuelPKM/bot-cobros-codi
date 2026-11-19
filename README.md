@@ -95,8 +95,6 @@ npm run tx -- <transactionId>
 
 En Render, con el Blueprint de `render.yaml`: ver [docs/deploy-render.md](docs/deploy-render.md).
 
-Como alternativa, en un droplet de DigitalOcean: ver [docs/deploy-digitalocean.md](docs/deploy-digitalocean.md).
-
 ## Demo web pública
 
 1. En `.env` pon `DEMO_ENABLED=true`, `PUBLIC_BASE_URL` y, en un hosting, `TRUST_PROXY=true`.
