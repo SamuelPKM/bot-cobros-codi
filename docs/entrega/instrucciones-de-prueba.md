@@ -2,7 +2,7 @@
 
 > Borrador. Antes de entregar, cambia `[URL DE LA DEMO]` por la dirección real y revisa que sigan siendo menos de 1000 palabras.
 
-[NOMBRE DEL PROYECTO] es un asistente de chat para que un negocio cobre con CoDi escribiendo un mensaje, como lo haría por WhatsApp. Se prueba en la demo web pública, sin cuenta ni invitación.
+Cóbrale es un asistente de chat para que un negocio cobre con CoDi escribiendo un mensaje, como lo haría por WhatsApp. Se prueba en la demo web pública, sin cuenta ni invitación.
 
 **Demo pública:** [URL DE LA DEMO]
 

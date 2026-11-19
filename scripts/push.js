@@ -11,7 +11,7 @@ import { loadConfig } from '../src/config.js';
 import { openDb } from '../src/db.js';
 import { createPeyClient, MIN_EXPIRATION_SECONDS, PeyError, toCents } from '../src/pey.js';
 
-const [phoneArg, amountArg = '0.01', concept = 'Prueba bot de cobros'] = process.argv.slice(2);
+const [phoneArg, amountArg = '0.01', concept = 'Prueba Cóbrale'] = process.argv.slice(2);
 const phoneNumber = normalizePhone(phoneArg);
 const amount = Number(amountArg);
 

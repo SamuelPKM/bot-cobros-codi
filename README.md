@@ -1,6 +1,6 @@
-# Bot de cobros CoDi
+# Cóbrale
 
-Bot de WhatsApp para que un negocio cobre con CoDi desde el chat, usando la API de [pey](https://docs.pey.mx).
+Asistente de chat para que un negocio cobre con CoDi escribiendo un mensaje. Usa CoDi a través de la API de [pey](https://docs.pey.mx); no es un producto oficial de pey ni de Banco de México.
 
 El comerciante escribe:
 

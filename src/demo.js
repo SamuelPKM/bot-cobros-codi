@@ -124,7 +124,7 @@ export function mountDemo(app, { db, onMessage, page, now = Date.now, log = cons
 
 function welcome({ merchantName, maxAmount }) {
   return [
-    `Hola. En esta demo eres *${merchantName}* y yo te ayudo a cobrar con CoDi.`,
+    `Hola, soy *Cóbrale*. En esta demo eres *${merchantName}* y yo te ayudo a cobrar con CoDi.`,
     '',
     'Prueba cualquiera de estas:',
     '• *cobra 0.01 a <tu celular> prueba*: te llega la solicitud de pago a la app de tu banco.',

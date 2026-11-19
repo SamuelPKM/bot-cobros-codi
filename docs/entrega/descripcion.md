@@ -1,8 +1,8 @@
 # Descripción del proyecto
 
-> Borrador, máximo 500 palabras. Falta el nombre: no puede incluir "pey" ni "CoDi" de forma que parezca oficial ("usa CoDi" sí, "CoDi Pagos" no). Agrega métricas y testimonios cuando se pruebe con un negocio real.
+> Borrador, máximo 500 palabras. Agrega métricas y testimonios cuando se pruebe con un negocio real.
 
-**[NOMBRE DEL PROYECTO]: cobra con CoDi escribiendo un mensaje.**
+**Cóbrale: cobra con CoDi escribiendo un mensaje.**
 
 ## El problema
 
@@ -10,7 +10,7 @@ Quien vive de su oficio (una barbería, una fonda, un plomero, una tienda de bar
 
 ## Qué hace
 
-[NOMBRE DEL PROYECTO] es un asistente de chat. El comerciante escribe como le escribiría a alguien:
+Cóbrale es un asistente de chat. El comerciante escribe como le escribiría a alguien:
 
 > cobra 150 a 5512345678 corte de pelo
 
