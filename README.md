@@ -91,6 +91,10 @@ Si no llega el webhook, consulta el estado en la API y revisa "Webhook Logs" en 
 npm run tx -- <transactionId>
 ```
 
+## Despliegue
+
+En un droplet de DigitalOcean, con HTTPS automático: ver [docs/deploy-digitalocean.md](docs/deploy-digitalocean.md).
+
 ## Demo web pública
 
 1. En `.env` pon `DEMO_ENABLED=true`, `PUBLIC_BASE_URL` y, en un hosting, `TRUST_PROXY=true`.
