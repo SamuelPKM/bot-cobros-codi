@@ -50,6 +50,11 @@ src/
    │  ├─ mappers/          # entidad -> respuesta pública (sin hash)
    │  ├─ seeders/          # admin inicial desde el entorno
    │  └─ types/            # Role
+   ├─ pey/                 # adaptador de la API de pey (CoDi)
+   │  ├─ services/         # PeyClient: push, QR, consulta de transacciones
+   │  ├─ interfaces/       # contratos de la API de pey
+   │  ├─ errors/           # PeyError (isOutcomeUnknown = "no se sabe si se procesó")
+   │  └─ constants/        # límites de pey y token PEY_FETCH
    └─ health/
       └─ controllers/      # GET /health (pública)
 ```
@@ -61,6 +66,7 @@ src/
 - **Cerrado por defecto:** toda ruta exige `Authorization: Bearer <jwt>` salvo las marcadas con `@Public()`.
 - **`shared/` es solo para lo que no pertenece a ningún dominio.** Si algo lo usa un solo módulo, va dentro de ese módulo.
 - **Dinero en centavos enteros** en la base; la API habla en pesos.
+- **Un POST a pey nunca se reintenta solo:** la API no tiene llave de idempotencia y reintentar un push puede cobrar dos veces. Un timeout o un error de red se tratan como "no se sabe".
 - **El esquema solo cambia con migraciones** (`synchronize: false`).
 - **Las pruebas unitarias van junto al archivo que prueban**; las e2e van en `test/`.
 - Al agregar un dominio nuevo (cobros, webhooks, notificaciones…) se repite el patrón en `modules/<dominio>/` y solo se crean las carpetas que de verdad se usan.
