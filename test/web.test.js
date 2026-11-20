@@ -94,9 +94,22 @@ describe('web', () => {
 
   async function signup(email = 'leo@example.com', negocio = 'Barbería Leo') {
     const b = browser(base);
-    const res = await b.post('/registro', { negocio, correo: email, contrasena: 'una-clave-larga' });
+    const res = await b.post('/registro', { negocio, nombre: 'Leo', correo: email, contrasena: 'una-clave-larga' });
     assert.equal(res.status, 303, res.text);
     return b;
+  }
+
+  /** El administrador invita a alguien; esa persona abre la liga y elige su contraseña. */
+  async function invite(admin, { nombre = 'Ana', correo = 'ana@example.com', rol = 'seller' } = {}) {
+    const page = await admin.post('/panel/equipo', { nombre, correo, rol, _csrf: await admin.csrf('/panel/equipo') });
+    assert.equal(page.status, 200, page.text);
+    const url = /value="(https:\/\/cobrale\.example\.com\/invitacion\/[^"]+)"/.exec(page.text)?.[1];
+    assert.ok(url, 'la página muestra la liga de invitación');
+    const path = new URL(url).pathname;
+    const b = browser(base);
+    const res = await b.post(path, { nombre, contrasena: 'clave-de-ana-123' });
+    assert.equal(res.location, '/panel?ok=unido', res.text);
+    return { b, user: await state.store.getUserByEmail(correo), path };
   }
 
   describe('páginas públicas', () => {
@@ -117,17 +130,19 @@ describe('web', () => {
   describe('cuentas', () => {
     it('el registro crea la cuenta, abre sesión con una cookie segura y lleva al panel', async () => {
       const b = browser(base);
-      const res = await b.post('/registro', { negocio: 'Barbería Leo', correo: 'Leo@Example.com', contrasena: 'una-clave-larga' });
+      const res = await b.post('/registro', { negocio: 'Barbería Leo', nombre: 'Leo', correo: 'Leo@Example.com', contrasena: 'una-clave-larga' });
 
       assert.equal(res.status, 303);
       assert.equal(res.location, '/panel?ok=bienvenida');
       assert.match(res.setCookie, /HttpOnly/);
       assert.match(res.setCookie, /SameSite=Lax/);
 
-      const merchant = await state.store.getMerchantByEmail('leo@example.com');
-      assert.equal(merchant.businessName, 'Barbería Leo');
-      assert.match(merchant.passwordHash, /^scrypt\$/);
-      assert.doesNotMatch(merchant.passwordHash, /una-clave-larga/);
+      const user = await state.store.getUserByEmail('leo@example.com');
+      assert.equal(user.role, 'admin');
+      assert.equal(user.name, 'Leo');
+      assert.equal((await state.store.getMerchant(user.merchantId)).businessName, 'Barbería Leo');
+      assert.match(user.passwordHash, /^scrypt\$/);
+      assert.doesNotMatch(user.passwordHash, /una-clave-larga/);
 
       const panel = await b.get('/panel?ok=bienvenida');
       assert.equal(panel.status, 200);
@@ -137,16 +152,18 @@ describe('web', () => {
 
     it('valida el registro y no repite correos', async () => {
       const b = browser(base);
-      assert.match((await b.post('/registro', { negocio: 'X', correo: 'no-es-correo', contrasena: 'una-clave-larga' })).text, /correo válido/);
-      assert.match((await b.post('/registro', { negocio: 'X', correo: 'a@b.mx', contrasena: 'corta' })).text, /al menos 10 caracteres/);
-      assert.match((await b.post('/registro', { negocio: '', correo: 'a@b.mx', contrasena: 'una-clave-larga' })).text, /nombre de tu negocio/);
+      assert.match((await b.post('/registro', { negocio: 'X', nombre: 'X', correo: 'no-es-correo', contrasena: 'una-clave-larga' })).text, /correo válido/);
+      assert.match((await b.post('/registro', { negocio: 'X', nombre: 'X', correo: 'a@b.mx', contrasena: 'corta' })).text, /al menos 10 caracteres/);
+      assert.match((await b.post('/registro', { negocio: '', nombre: 'X', correo: 'a@b.mx', contrasena: 'una-clave-larga' })).text, /nombre de tu negocio/);
+      assert.match((await b.post('/registro', { negocio: 'X', nombre: '', correo: 'a@b.mx', contrasena: 'una-clave-larga' })).text, /Escribe tu nombre/);
       await signup('a@b.mx');
-      assert.match((await browser(base).post('/registro', { negocio: 'X', correo: 'A@B.MX', contrasena: 'una-clave-larga' })).text, /Ya existe una cuenta/);
+      assert.match((await browser(base).post('/registro', { negocio: 'X', nombre: 'X', correo: 'A@B.MX', contrasena: 'una-clave-larga' })).text, /Ya existe una cuenta/);
     });
 
     it('un correo de confianza queda sin el límite del modo prueba', async () => {
       await signup('equipo@cobrale.mx', 'Equipo');
-      assert.equal((await state.store.getMerchantByEmail('equipo@cobrale.mx')).isTrusted, true);
+      const user = await state.store.getUserByEmail('equipo@cobrale.mx');
+      assert.equal((await state.store.getMerchant(user.merchantId)).isTrusted, true);
     });
 
     it('iniciar sesión: contraseña mala, buena, y límite de intentos', async () => {
@@ -271,7 +288,7 @@ describe('web', () => {
       assert.match(overLimit.text, /modo prueba el monto máximo es de \$1\.00/);
     });
 
-    it('un comerciante no puede ver ni tocar los cobros de otro', async () => {
+    it('un negocio no puede ver ni tocar los cobros de otro', async () => {
       const leo = await signup('leo@example.com');
       await leo.post('/panel/cobros', { tipo: 'push', monto: '0.01', telefono: '5512345678', _csrf: await leo.csrf() });
 
@@ -299,7 +316,8 @@ describe('web', () => {
       await b.post('/panel/cobros', { tipo: 'qr', monto: '0.50', concepto: '=HYPERLINK("x")', _csrf: await b.csrf() });
       const csv = await b.get('/panel/cobros.csv');
       assert.match(csv.headers.get('content-type'), /text\/csv/);
-      assert.match(csv.text, /folio,creado,forma,monto,concepto,cliente,estado,pagado,clave_rastreo/);
+      // El administrador solo, sin equipo: igual trae quién vendió.
+      assert.match(csv.text, /folio,creado,forma,monto,concepto,cliente,vendio,estado,pagado,clave_rastreo/);
       assert.match(csv.text, /"'=HYPERLINK\(""x""\)"/);
     });
   });
@@ -309,7 +327,8 @@ describe('web', () => {
       const b = await signup();
       const res = await b.post('/panel/ajustes/negocio', { negocio: 'Barbería Leo e Hijos', _csrf: await b.csrf('/panel/ajustes') });
       assert.equal(res.location, '/panel/ajustes?ok=negocio');
-      assert.equal((await state.store.getMerchantByEmail('leo@example.com')).businessName, 'Barbería Leo e Hijos');
+      const user = await state.store.getUserByEmail('leo@example.com');
+      assert.equal((await state.store.getMerchant(user.merchantId)).businessName, 'Barbería Leo e Hijos');
     });
 
     it('genera un código para ligar WhatsApp, con el número del bot', async () => {
@@ -324,7 +343,13 @@ describe('web', () => {
       assert.match((await b.get('/panel/ajustes')).text, /Ligado al <strong>55 1111 2222<\/strong>/);
 
       await b.post('/panel/ajustes/whatsapp/quitar', { _csrf: await b.csrf('/panel/ajustes') });
-      assert.equal((await state.store.getMerchantByEmail('leo@example.com')).whatsappPhone, null);
+      assert.equal((await state.store.getUserByEmail('leo@example.com')).whatsappPhone, null);
+    });
+
+    it('cambia tu nombre', async () => {
+      const b = await signup();
+      await b.post('/panel/ajustes/perfil', { nombre: 'Leonardo', _csrf: await b.csrf('/panel/ajustes') });
+      assert.equal((await state.store.getUserByEmail('leo@example.com')).name, 'Leonardo');
     });
 
     it('registra la CLABE y muestra que está en validación', async () => {
@@ -339,6 +364,128 @@ describe('web', () => {
       const page = await b.get('/panel/ajustes');
       assert.match(page.text, /terminación <strong>5713<\/strong>/);
       assert.match(page.text, /En validación con Banxico/);
+    });
+  });
+
+  describe('equipo', () => {
+    it('el administrador invita a un vendedor y este entra con su propia contraseña', async () => {
+      const leo = await signup();
+      const { b: ana, user, path } = await invite(leo);
+      assert.equal(user.role, 'seller');
+      assert.match(user.passwordHash, /^scrypt\$/);
+      assert.equal(user.inviteTokenHash, null);
+
+      // La liga sirve una sola vez.
+      assert.equal((await browser(base).get(path)).status, 404);
+      // Y ya puede entrar con su correo.
+      const login = await browser(base).post('/entrar', { correo: 'ana@example.com', contrasena: 'clave-de-ana-123' });
+      assert.equal(login.status, 303);
+
+      const panel = await ana.get('/panel');
+      assert.match(panel.text, /Ves tus cobros/);
+      assert.doesNotMatch(panel.text, /href="\/panel\/equipo"/);
+    });
+
+    it('una liga de invitación inventada no sirve', async () => {
+      const res = await browser(base).get('/invitacion/inventada-inventada-inventada');
+      assert.equal(res.status, 404);
+      assert.match(res.text, /ya no sirve/);
+    });
+
+    it('no invita un correo que ya tiene cuenta', async () => {
+      const leo = await signup();
+      await signup('otro@example.com', 'Otro');
+      const page = await leo.post('/panel/equipo', { nombre: 'X', correo: 'OTRO@example.com', rol: 'seller', _csrf: await leo.csrf('/panel/equipo') });
+      assert.equal(page.status, 422);
+      assert.match(page.text, /ya tiene una cuenta/);
+    });
+
+    it('el vendedor ve solo sus cobros; el administrador ve todos y quién vendió', async () => {
+      const leo = await signup();
+      await leo.post('/panel/cobros', { tipo: 'qr', monto: '0.50', concepto: 'de-leo', _csrf: await leo.csrf() });
+      const { b: ana } = await invite(leo);
+      await ana.post('/panel/cobros', { tipo: 'qr', monto: '0.75', concepto: 'de-ana', _csrf: await ana.csrf() });
+      await state.store.markPaid(1, { paidVia: 'qr' });
+      await state.store.markPaid(2, { paidVia: 'qr' });
+
+      const anaPanel = (await ana.get('/panel')).text;
+      assert.match(anaPanel, /de-ana/);
+      assert.doesNotMatch(anaPanel, /de-leo/);
+      assert.match(anaPanel, /id="stat-paid">\$0\.75</);
+      assert.equal((await ana.get('/panel/cobros/1')).status, 404);
+      assert.equal((await ana.get('/panel/api/cobros/1')).status, 404);
+      assert.doesNotMatch((await ana.get('/panel/cobros.csv')).text, /de-leo|vendio/);
+
+      const leoPanel = (await leo.get('/panel')).text;
+      assert.match(leoPanel, /de-ana/);
+      assert.match(leoPanel, /de-leo/);
+      assert.match(leoPanel, /id="stat-paid">\$1\.25</);
+      assert.match(leoPanel, /Hoy por persona/);
+      assert.match(leoPanel, /<th>Vendió<\/th>/);
+      assert.match((await leo.get('/panel/cobros/2')).text, /<dt>Vendió<\/dt><dd>Ana<\/dd>/);
+      assert.match((await leo.get('/panel/cobros.csv')).text, /de-ana,,Ana,Pagado/);
+
+      // Filtrar por persona.
+      const anaId = (await state.store.getUserByEmail('ana@example.com')).id;
+      const filtered = (await leo.get(`/panel?persona=${anaId}`)).text;
+      assert.match(filtered, /de-ana/);
+      assert.doesNotMatch(filtered, /de-leo/);
+    });
+
+    it('el vendedor no puede administrar el equipo, el negocio ni la CLABE', async () => {
+      const leo = await signup();
+      const { b: ana } = await invite(leo);
+      const csrf = await ana.csrf('/panel/ajustes');
+      assert.equal((await ana.get('/panel/equipo')).status, 403);
+      assert.equal((await ana.post('/panel/equipo', { nombre: 'X', correo: 'x@example.com', _csrf: csrf })).status, 403);
+      assert.equal((await ana.post('/panel/ajustes/negocio', { negocio: 'Mío', _csrf: csrf })).status, 403);
+      assert.equal(
+        (await ana.post('/panel/ajustes/clabe', { titular: 'Ana', clabe: '012180015826225713', entidad: 'PERSON', _csrf: csrf })).status,
+        403,
+      );
+      assert.equal(state.pey.bankAccounts.size, 0);
+      assert.doesNotMatch((await ana.get('/panel/ajustes')).text, /Registrar CLABE/);
+      // Pero sí liga su propio WhatsApp.
+      assert.match((await ana.post('/panel/ajustes/whatsapp/codigo', { _csrf: csrf })).text, /vincular \d{6}/);
+    });
+
+    it('cambiar de rol y desactivar, sin quedarse nunca sin administrador', async () => {
+      const leo = await signup();
+      const { b: ana, user } = await invite(leo);
+      const leoUser = await state.store.getUserByEmail('leo@example.com');
+      let csrf = await leo.csrf('/panel/equipo');
+
+      // Nadie se cambia a sí mismo.
+      assert.match((await leo.post(`/panel/equipo/${leoUser.id}/rol`, { _csrf: csrf })).text, /No puedes cambiar tu propio rol/);
+
+      // Ana pasa a administradora y ve el equipo.
+      assert.equal((await leo.post(`/panel/equipo/${user.id}/rol`, { _csrf: csrf })).location, '/panel/equipo?ok=rol');
+      assert.equal((await ana.get('/panel/equipo')).status, 200);
+
+      // Ana le quita el rol a Leo; Leo ya no puede volver a quitárselo a ella.
+      const anaCsrf = await ana.csrf('/panel/equipo');
+      await ana.post(`/panel/equipo/${leoUser.id}/rol`, { _csrf: anaCsrf });
+      assert.equal((await state.store.getUser(leoUser.id)).role, 'seller');
+      assert.equal((await leo.post(`/panel/equipo/${user.id}/desactivar`, { _csrf: csrf })).status, 403);
+
+      // Ana desactiva a Leo: su sesión deja de servir y no puede entrar.
+      await ana.post(`/panel/equipo/${leoUser.id}/desactivar`, { _csrf: anaCsrf });
+      assert.equal((await leo.get('/panel')).status, 302);
+      assert.equal((await browser(base).post('/entrar', { correo: 'leo@example.com', contrasena: 'una-clave-larga' })).status, 401);
+
+      // Y la reactiva.
+      csrf = anaCsrf;
+      await ana.post(`/panel/equipo/${leoUser.id}/reactivar`, { _csrf: csrf });
+      assert.equal((await browser(base).post('/entrar', { correo: 'leo@example.com', contrasena: 'una-clave-larga' })).status, 303);
+    });
+
+    it('un administrador no toca personas de otro negocio', async () => {
+      const leo = await signup();
+      await signup('otro@example.com', 'Otro');
+      const otro = await state.store.getUserByEmail('otro@example.com');
+      const res = await leo.post(`/panel/equipo/${otro.id}/desactivar`, { _csrf: await leo.csrf('/panel/equipo') });
+      assert.equal(res.status, 404);
+      assert.equal((await state.store.getUser(otro.id)).active, true);
     });
   });
 });

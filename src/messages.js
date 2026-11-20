@@ -68,8 +68,8 @@ export const texts = {
       ? `Este número todavía no está ligado a una cuenta de Cóbrale. Crea tu cuenta en ${webUrl} y, en Ajustes, sigue los pasos para ligar tu WhatsApp.`
       : 'Este número todavía no está ligado a una cuenta de Cóbrale.',
 
-  linked: (merchant) =>
-    `Listo, este WhatsApp quedó ligado a *${merchant.businessName}*. Ya puedes cobrar desde aquí.\n\n${HELP}`,
+  linked: (user, merchant) =>
+    `Listo, ${user.name}: este WhatsApp quedó ligado a *${merchant.businessName}*${user.role === 'admin' ? ' como administrador' : ''}. Ya puedes cobrar desde aquí.\n\n${HELP}`,
 
   linkCodeInvalid: () => 'Ese código no es válido o ya venció. Genera uno nuevo en Ajustes de tu cuenta de Cóbrale.',
 
@@ -187,7 +187,7 @@ export const texts = {
 
   linkFailed: (charge) => `No pude generar la liga para el cobro de ${describe(charge)}. Intenta de nuevo en un momento.`,
 
-  summary: ({ paid, pending, expiredCount }) => {
+  summary: ({ paid, pending, expiredCount, bySeller = null }) => {
     if (paid.length === 0 && pending.length === 0 && expiredCount === 0) {
       return 'Hoy todavía no has enviado cobros.';
     }
@@ -198,6 +198,13 @@ export const texts = {
       for (const charge of pending) lines.push(`• ${describe(charge)}`);
     }
     if (expiredCount > 0) lines.push('', `Expirados sin pagar: ${expiredCount}`);
+    if (bySeller) {
+      lines.push('', '*Por persona*');
+      for (const seller of bySeller) {
+        const pendingText = seller.pendingCount ? `, ${seller.pendingCount} pendiente${seller.pendingCount === 1 ? '' : 's'}` : '';
+        lines.push(`• ${seller.name}: ${money(seller.paidCents)} en ${plural(seller.paidCount, 'cobro', 'cobros')}${pendingText}`);
+      }
+    }
     return lines.join('\n');
   },
 };

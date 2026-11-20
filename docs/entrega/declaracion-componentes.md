@@ -24,6 +24,7 @@ Desde el 14 de noviembre de 2026:
 - Web completa: página de inicio, cuentas de comerciante (registro, inicio de sesión), panel de cobros en vivo, exportación a CSV y ajustes.
 - Registro de la CLABE de cada comerciante en pey, con cobros a su propia cuenta y modo prueba mientras Banxico la valida.
 - Vinculación de WhatsApp a una cuenta con código.
+- Equipos: administradores y vendedores por negocio, invitación con liga, cobros a nombre de cada persona y totales por persona.
 - Base de datos en Postgres, preparada para varias instancias (sesiones, límites y barrido compartidos).
 - Pruebas automáticas de todo lo anterior.
 - [Agregar aquí lo que se haga después: primer cobro real, conexión con la app de Meta, prueba con un negocio, etc.]

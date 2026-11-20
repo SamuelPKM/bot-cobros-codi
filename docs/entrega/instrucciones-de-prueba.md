@@ -21,7 +21,8 @@ Cóbrale permite a un negocio cobrar con CoDi escribiendo un mensaje o desde una
 3. **QR.** Elige "Con QR", `0.01` y **Continuar**. Aparece el QR, vigente 15 minutos. Escanéalo con tu banco y paga: la página cambia sola a **Pagado**.
 4. **Liga de pago.** Elige "Con liga de pago", `0.01` y **Continuar**. Copia la liga, ábrela y paga con CoDi o con tarjeta.
 5. **Panel.** En **Cobros** ves lo cobrado hoy, lo pendiente y la lista de cobros, que se actualiza sola. **Descargar CSV** exporta todos los cobros.
-6. **Ajustes.** Ahí el comerciante cambia el nombre que ve su cliente en el banco, liga su WhatsApp y registra su CLABE para que los pagos le lleguen directo. La CLABE se valida con el dígito verificador y luego con Banxico, en hasta 5 días hábiles. Por eso la cuenta de prueba no tiene CLABE propia.
+6. **Ajustes.** Ahí cada persona cambia su nombre y liga su WhatsApp. El administrador además cambia el nombre que ve el cliente en el banco y registra la CLABE del negocio para que los pagos le lleguen directo. La CLABE se valida con el dígito verificador y luego con Banxico, en hasta 5 días hábiles. Por eso la cuenta de prueba no tiene CLABE propia.
+7. **Equipo.** La cuenta de prueba es administradora. En **Equipo** invita a un vendedor con tu nombre y otro correo: aparece una liga. Ábrela en una ventana privada y elige una contraseña. Crea un cobro como vendedor: ves solo tus cobros. Vuelve a la ventana del administrador: ves los cobros de los dos, quién vendió cada uno, los totales de hoy por persona y un filtro por persona.
 
 También puedes crear tu propia cuenta en **Crear cuenta**. Mientras no tenga CLABE validada, queda en el mismo modo prueba.
 
@@ -45,7 +46,9 @@ Si un cobro al celular vence sin pagarse, el asistente avisa y ofrece una liga, 
 - Un monto mayor a $1.00: se rechaza con una explicación del modo prueba.
 - Un teléfono con lada o espacios (`+52 1 55 1234 5678`): se entiende igual.
 - Enviar dos veces la confirmación: no se manda un segundo cobro.
-- En el panel, abrir el enlace de un cobro de otra cuenta: no se muestra.
+- En el panel, abrir el enlace de un cobro de otra cuenta, o el de otro vendedor siendo vendedor: no se muestra.
+- Como vendedor, abrir `/panel/equipo`: solo los administradores pueden.
+- Quitarle el rol de administrador al único que queda: no se permite.
 
 ## Cómo usa el API de pey
 

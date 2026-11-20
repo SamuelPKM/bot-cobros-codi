@@ -1,4 +1,8 @@
-// Rutas de la web: inicio, cuentas de comerciante y panel de cobros.
+// Rutas de la web: inicio, cuentas, panel de cobros y equipo.
+//
+// Cada negocio tiene administradores y vendedores. Todos cobran. El vendedor
+// ve solo sus cobros; el administrador ve los de todo el negocio y además
+// administra el equipo, el nombre del negocio y la CLABE.
 //
 //   GET  /                         página de inicio
 //   GET  /registro, POST /registro crear cuenta
@@ -10,18 +14,21 @@
 //   POST /panel/cobros/:id/confirmar | cancelar | liga
 //   GET  /panel/cobros.csv         todos los cobros
 //   GET  /panel/api/cobros[/:id]   estados para actualizar el panel en vivo
-//   GET  /panel/ajustes            negocio, WhatsApp y CLABE
+//   GET  /panel/ajustes            tus datos y tu WhatsApp; negocio y CLABE (solo administrador)
+//   GET  /panel/equipo             personas del negocio, invitar, roles (solo administrador)
+//   GET  /invitacion/:token        la persona invitada elige su contraseña
 
 import { randomInt } from 'node:crypto';
 import express from 'express';
 import { normalizePhone, parseAmount } from '../command.js';
 import { money } from '../messages.js';
 import { toCents } from '../pey.js';
-import { createAuth, hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from './auth.js';
+import { createAuth, hashPassword, hashToken, MIN_PASSWORD_LENGTH, newToken, verifyPassword } from './auth.js';
 import {
   authPage,
   chargePage,
   formatDateTime,
+  invitePage,
   KIND,
   landingPage,
   messagePage,
@@ -30,18 +37,26 @@ import {
   settingsPage,
   STATUS,
   statusChip,
+  teamPage,
 } from './views.js';
 
 const ASSETS = new URL('./assets/', import.meta.url).pathname;
 const MINUTE = 60 * 1000;
 const LINK_CODE_MS = 15 * MINUTE;
+const INVITE_MS = 7 * 24 * 60 * MINUTE;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const validName = (name) => name.length > 0 && name.length <= 60;
 
 const FLASH = {
   bienvenida: 'Tu cuenta está lista. Crea tu primer cobro.',
   enviado: 'Listo, le llegó la solicitud de pago a tu cliente. Esta página se actualiza sola.',
   cancelado: 'Cancelado: no se envió nada.',
-  negocio: 'Guardamos el nombre de tu negocio.',
+  negocio: 'Guardamos el nombre del negocio.',
+  perfil: 'Guardamos tu nombre.',
+  rol: 'Cambiamos el rol.',
+  desactivado: 'Desactivamos a esa persona. Ya no puede entrar ni cobrar; sus cobros se conservan.',
+  reactivado: 'Reactivamos a esa persona. Si no tenía contraseña, genera una nueva liga de invitación.',
+  unido: 'Ya eres parte del equipo. Crea tu primer cobro.',
   clabe: 'Registramos tu CLABE. Banxico la valida en hasta 5 días hábiles.',
   desligado: 'Tu WhatsApp ya no está ligado a esta cuenta.',
 };
@@ -86,7 +101,13 @@ export function mountWeb(
     log = console,
   },
 ) {
-  const auth = createAuth({ store, secure: secureCookies, now });
+  const auth = createAuth({
+    store,
+    secure: secureCookies,
+    now,
+    forbiddenPage: (req) =>
+      messagePage({ title: 'Solo para administradores', text: 'Pídele a un administrador de tu negocio que lo haga.', user: req.user, csrf: req.csrfToken }),
+  });
   const form = express.urlencoded({ extended: false, limit: '16kb' });
   const canLink = Boolean(publicBaseUrl);
   const trusted = new Set(trustedEmails.map((e) => e.toLowerCase()));
@@ -101,17 +122,19 @@ export function mountWeb(
 
   const send = (res, html, status = 200) => res.status(status).type('html').send(html);
   const wrap = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
-  const ctxFor = (req) => charges.contextFor(req.merchant, { channel: 'web' });
+  const ctxFor = (req) => charges.contextFor(req.merchant, { channel: 'web', user: req.user });
+  const isAdmin = (req) => req.user?.role === 'admin';
+  const baseUrl = (req) => publicBaseUrl ?? `${req.protocol}://${req.get('host')}`;
 
   // ------------------------------------------------------------- públicas
 
   web.get(
     '/',
-    wrap(async (req, res) => send(res, landingPage({ merchant: req.merchant, demoEnabled }))),
+    wrap(async (req, res) => send(res, landingPage({ user: req.user, demoEnabled }))),
   );
 
   web.get('/registro', (req, res) => {
-    if (req.merchant) return res.redirect('/panel');
+    if (req.user) return res.redirect('/panel');
     return send(res, authPage({ mode: 'registro', registrationOpen }));
   });
 
@@ -121,37 +144,43 @@ export function mountWeb(
     auth.checkForm,
     wrap(async (req, res) => {
       if (!registrationOpen) return send(res, authPage({ mode: 'registro', registrationOpen }), 403);
-      const values = { negocio: String(req.body.negocio ?? '').trim(), correo: String(req.body.correo ?? '').trim().toLowerCase() };
+      const values = {
+        negocio: String(req.body.negocio ?? '').trim(),
+        nombre: String(req.body.nombre ?? '').trim(),
+        correo: String(req.body.correo ?? '').trim().toLowerCase(),
+      };
       const password = String(req.body.contrasena ?? '');
       const fail = (error, status = 422) => send(res, authPage({ mode: 'registro', error, values }), status);
 
       if (!(await store.hit(`signup-ip:${req.ip}`, { limit: 10, windowMs: 60 * MINUTE }))) {
         return fail('Demasiados registros desde esta conexión. Intenta en una hora.', 429);
       }
-      if (!values.negocio || values.negocio.length > 60) return fail('Escribe el nombre de tu negocio (hasta 60 caracteres).');
+      if (!validName(values.negocio)) return fail('Escribe el nombre de tu negocio (hasta 60 caracteres).');
+      if (!validName(values.nombre)) return fail('Escribe tu nombre (hasta 60 caracteres).');
       if (!EMAIL.test(values.correo)) return fail('Escribe un correo válido.');
       if (password.length < MIN_PASSWORD_LENGTH) return fail(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`);
-      if (await store.getMerchantByEmail(values.correo)) return fail('Ya existe una cuenta con ese correo. Entra con tu contraseña.');
+      if (await store.getUserByEmail(values.correo)) return fail('Ya existe una cuenta con ese correo. Entra con tu contraseña.');
 
-      let merchant;
+      let user;
       try {
-        merchant = await store.createMerchant({
-          email: values.correo,
-          passwordHash: await hashPassword(password),
+        ({ user } = await store.createMerchantWithAdmin({
           businessName: values.negocio,
           isTrusted: trusted.has(values.correo),
-        });
+          name: values.nombre,
+          email: values.correo,
+          passwordHash: await hashPassword(password),
+        }));
       } catch (error) {
         if (error.code === '23505') return fail('Ya existe una cuenta con ese correo. Entra con tu contraseña.');
         throw error;
       }
-      await auth.startSession(res, merchant);
+      await auth.startSession(res, user);
       return res.redirect(303, '/panel?ok=bienvenida');
     }),
   );
 
   web.get('/entrar', (req, res) => {
-    if (req.merchant) return res.redirect(safeNext(req.query.siguiente));
+    if (req.user) return res.redirect(safeNext(req.query.siguiente));
     return send(res, authPage({ mode: 'entrar', next: safeNext(req.query.siguiente) }));
   });
 
@@ -169,11 +198,11 @@ export function mountWeb(
         (await store.hit(`login-email:${correo}`, { limit: 10, windowMs: 15 * MINUTE }));
       if (!allowed) return fail('Demasiados intentos. Espera 15 minutos e intenta de nuevo.', 429);
 
-      const merchant = await store.getMerchantByEmail(correo);
-      const ok = merchant?.passwordHash && (await verifyPassword(String(req.body.contrasena ?? ''), merchant.passwordHash));
+      const user = await store.getUserByEmail(correo);
+      const ok = user?.active && user.passwordHash && (await verifyPassword(String(req.body.contrasena ?? ''), user.passwordHash));
       if (!ok) return fail('El correo o la contraseña no coinciden.');
 
-      await auth.startSession(res, merchant);
+      await auth.startSession(res, user);
       return res.redirect(303, next);
     }),
   );
@@ -188,22 +217,85 @@ export function mountWeb(
     }),
   );
 
+  // ----------------------------------------------------------- invitación
+
+  async function invitation(token) {
+    const invitee = typeof token === 'string' && token.length >= 20 ? await store.getUserByInvite(hashToken(token)) : null;
+    const merchant = invitee ? await store.getMerchant(invitee.merchantId) : null;
+    return merchant ? { invitee, merchantName: merchant.businessName } : { invitee: null, merchantName: null };
+  }
+
+  web.get(
+    '/invitacion/:token',
+    wrap(async (req, res) => {
+      res.set('Referrer-Policy', 'no-referrer');
+      const found = await invitation(req.params.token);
+      return send(res, invitePage({ ...found, token: req.params.token, csrf: req.csrfToken }), found.invitee ? 200 : 404);
+    }),
+  );
+
+  web.post(
+    '/invitacion/:token',
+    form,
+    auth.checkForm,
+    wrap(async (req, res) => {
+      const found = await invitation(req.params.token);
+      const values = { nombre: String(req.body.nombre ?? '').trim() };
+      const password = String(req.body.contrasena ?? '');
+      const fail = (error, status = 422) => send(res, invitePage({ ...found, token: req.params.token, error, values, csrf: req.csrfToken }), status);
+      if (!found.invitee) return fail(null, 404);
+      if (!(await store.hit(`invite-ip:${req.ip}`, { limit: 20, windowMs: 60 * MINUTE }))) return fail('Demasiados intentos. Espera una hora.', 429);
+      if (!validName(values.nombre)) return fail('Escribe tu nombre (hasta 60 caracteres).');
+      if (password.length < MIN_PASSWORD_LENGTH) return fail(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`);
+
+      const user = await store.updateUser(found.invitee.id, {
+        name: values.nombre,
+        passwordHash: await hashPassword(password),
+        inviteTokenHash: null,
+        inviteExpiresAt: null,
+      });
+      // Si había otra sesión abierta en este navegador, se cierra antes.
+      await auth.endSession(req, res, { clearCookie: false });
+      await auth.startSession(res, user);
+      return res.redirect(303, '/panel?ok=unido');
+    }),
+  );
+
   // ---------------------------------------------------------------- panel
 
   const panel = express.Router();
-  panel.use(auth.requireMerchant);
+  panel.use(auth.requireUser);
+
+  /**
+   * De quién son los cobros que se listan: el vendedor solo ve los suyos; el
+   * administrador ve todos o los de una persona (?persona=id) de su equipo.
+   */
+  async function listScope(req, team = null) {
+    if (!isAdmin(req)) return { createdBy: req.user.id, team: null };
+    const members = team ?? (await store.listUsers(req.merchant.id));
+    const id = Number(req.query.persona);
+    const chosen = Number.isInteger(id) && members.some((m) => m.id === id) ? id : null;
+    return { createdBy: chosen, team: members };
+  }
 
   async function renderPanel(req, res, { error = null, values = {}, status = 200 } = {}) {
     const ctx = ctxFor(req);
-    const [summary, list] = await Promise.all([charges.summary(ctx), store.listCharges(ctx.ownerKey, { limit: 50 })]);
+    const scope = await listScope(req);
+    const [summary, list] = await Promise.all([
+      charges.summary(ctx),
+      store.listCharges(ctx.ownerKey, { limit: 50, createdBy: scope.createdBy }),
+    ]);
     return send(
       res,
       panelPage({
+        user: req.user,
         merchant: req.merchant,
         csrf: req.csrfToken,
         limits,
         summary,
         charges: list,
+        team: scope.team,
+        filterUserId: scope.createdBy,
         flash: FLASH[req.query.ok] ?? null,
         error,
         values,
@@ -248,22 +340,24 @@ export function mountWeb(
     }),
   );
 
-  /** El cobro del comerciante con ese id, o null (si no existe o es de otro). */
+  /** El cobro con ese id si esta persona puede verlo, o null (no existe, es de otro negocio o de otro vendedor). */
   async function ownCharge(req) {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return null;
     const charge = await store.getCharge(id);
-    return charge && charge.ownerKey === ctxFor(req).ownerKey ? charge : null;
+    return charges.canAccess(ctxFor(req), charge) ? charge : null;
   }
 
   async function renderCharge(req, res, charge, { error = null, status = 200 } = {}) {
     const png = charge.status === 'qr' ? await charges.qrPngFor(charge) : null;
+    const creator = isAdmin(req) && charge.createdBy ? await store.getUser(charge.createdBy) : null;
     return send(
       res,
       chargePage({
-        merchant: req.merchant,
+        user: req.user,
         csrf: req.csrfToken,
         charge,
+        creatorName: creator?.name ?? null,
         qrDataUrl: png ? `data:image/png;base64,${png.toString('base64')}` : null,
         flash: FLASH[req.query.ok] ?? null,
         error,
@@ -274,7 +368,7 @@ export function mountWeb(
   }
 
   const notFound = (req, res) =>
-    send(res, messagePage({ title: 'No encontramos ese cobro', text: 'Puede que sea de otra cuenta o que el enlace esté mal.', merchant: req.merchant, csrf: req.csrfToken }), 404);
+    send(res, messagePage({ title: 'No encontramos ese cobro', text: 'Puede que sea de otra persona o que el enlace esté mal.', user: req.user, csrf: req.csrfToken }), 404);
 
   panel.get(
     '/cobros/:id',
@@ -301,8 +395,10 @@ export function mountWeb(
   panel.get(
     '/cobros.csv',
     wrap(async (req, res) => {
-      const list = await store.listCharges(ctxFor(req).ownerKey, { limit: 5000 });
-      const header = ['folio', 'creado', 'forma', 'monto', 'concepto', 'cliente', 'estado', 'pagado', 'clave_rastreo'];
+      const scope = await listScope(req);
+      const list = await store.listCharges(ctxFor(req).ownerKey, { limit: 5000, createdBy: scope.createdBy });
+      const names = scope.team ? new Map(scope.team.map((u) => [u.id, u.name])) : null;
+      const header = ['folio', 'creado', 'forma', 'monto', 'concepto', 'cliente', ...(names ? ['vendio'] : []), 'estado', 'pagado', 'clave_rastreo'];
       const rows = list.map((c) => [
         c.id,
         formatDateTime(c.createdAt),
@@ -310,6 +406,7 @@ export function mountWeb(
         (c.amountCents / 100).toFixed(2),
         c.concept ?? '',
         c.payerPhone ?? '',
+        ...(names ? [names.get(c.createdBy) ?? ''] : []),
         STATUS[c.status]?.label ?? c.status,
         c.paidAt ? formatDateTime(c.paidAt * 1000) : '',
         c.trackingKey ?? '',
@@ -328,7 +425,11 @@ export function mountWeb(
     '/api/cobros',
     wrap(async (req, res) => {
       const ctx = ctxFor(req);
-      const [summary, list] = await Promise.all([charges.summary(ctx), store.listCharges(ctx.ownerKey, { limit: 50 })]);
+      const scope = await listScope(req);
+      const [summary, list] = await Promise.all([
+        charges.summary(ctx),
+        store.listCharges(ctx.ownerKey, { limit: 50, createdBy: scope.createdBy }),
+      ]);
       res.set('Cache-Control', 'no-store').json({
         charges: list.map((c) => ({ id: c.id, status: c.status, chip: statusChip(c.status) })),
         summary: { totalPaid: money(summary.totalPaidCents), pending: summary.pending.length, expired: summary.expiredCount },
@@ -347,12 +448,13 @@ export function mountWeb(
 
   // -------------------------------------------------------------- ajustes
 
-  function renderSettings(req, res, { merchant = req.merchant, error = null, linkCode = null, values = {}, status = 200 } = {}) {
-    const activeCode = linkCode ?? (merchant.linkCode && merchant.linkCodeExpiresAt > now() ? merchant.linkCode : null);
+  function renderSettings(req, res, { user = req.user, error = null, linkCode = null, values = {}, status = 200 } = {}) {
+    const activeCode = linkCode ?? (user.linkCode && user.linkCodeExpiresAt > now() ? user.linkCode : null);
     return send(
       res,
       settingsPage({
-        merchant,
+        user,
+        merchant: req.merchant,
         csrf: req.csrfToken,
         flash: FLASH[req.query.ok] ?? null,
         error,
@@ -367,12 +469,25 @@ export function mountWeb(
   panel.get('/ajustes', wrap((req, res) => renderSettings(req, res)));
 
   panel.post(
-    '/ajustes/negocio',
+    '/ajustes/perfil',
     form,
     auth.checkForm,
     wrap(async (req, res) => {
+      const name = String(req.body.nombre ?? '').trim();
+      if (!validName(name)) return renderSettings(req, res, { error: 'Escribe tu nombre (hasta 60 caracteres).', status: 422 });
+      await store.updateUser(req.user.id, { name });
+      return res.redirect(303, '/panel/ajustes?ok=perfil');
+    }),
+  );
+
+  panel.post(
+    '/ajustes/negocio',
+    form,
+    auth.checkForm,
+    auth.requireAdmin,
+    wrap(async (req, res) => {
       const name = String(req.body.negocio ?? '').trim();
-      if (!name || name.length > 60) return renderSettings(req, res, { error: 'Escribe el nombre de tu negocio (hasta 60 caracteres).', status: 422 });
+      if (!validName(name)) return renderSettings(req, res, { error: 'Escribe el nombre del negocio (hasta 60 caracteres).', status: 422 });
       await store.updateMerchant(req.merchant.id, { businessName: name });
       return res.redirect(303, '/panel/ajustes?ok=negocio');
     }),
@@ -383,12 +498,12 @@ export function mountWeb(
     form,
     auth.checkForm,
     wrap(async (req, res) => {
-      // Código de 6 dígitos; si choca con el de otro comerciante, se genera otro.
+      // Código de 6 dígitos; si choca con el de otra persona, se genera otro.
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
         try {
-          const merchant = await store.updateMerchant(req.merchant.id, { linkCode: code, linkCodeExpiresAt: now() + LINK_CODE_MS });
-          return renderSettings(req, res, { merchant, linkCode: code });
+          const user = await store.updateUser(req.user.id, { linkCode: code, linkCodeExpiresAt: now() + LINK_CODE_MS });
+          return renderSettings(req, res, { user, linkCode: code });
         } catch (error) {
           if (error.code !== '23505') throw error;
         }
@@ -402,7 +517,7 @@ export function mountWeb(
     form,
     auth.checkForm,
     wrap(async (req, res) => {
-      await store.updateMerchant(req.merchant.id, { whatsappPhone: null });
+      await store.updateUser(req.user.id, { whatsappPhone: null });
       return res.redirect(303, '/panel/ajustes?ok=desligado#whatsapp');
     }),
   );
@@ -411,6 +526,7 @@ export function mountWeb(
     '/ajustes/clabe',
     form,
     auth.checkForm,
+    auth.requireAdmin,
     wrap(async (req, res) => {
       const values = {
         titular: String(req.body.titular ?? '').trim(),
@@ -430,12 +546,133 @@ export function mountWeb(
     }),
   );
 
+  // --------------------------------------------------------------- equipo
+
+  const team = express.Router();
+  team.use(auth.requireAdmin);
+
+  async function renderTeam(req, res, { invite = null, error = null, values = {}, status = 200 } = {}) {
+    return send(
+      res,
+      teamPage({
+        user: req.user,
+        merchant: req.merchant,
+        csrf: req.csrfToken,
+        team: await store.listUsers(req.merchant.id),
+        invite,
+        flash: FLASH[req.query.ok] ?? null,
+        error,
+        values,
+      }),
+      status,
+    );
+  }
+
+  /** Genera una liga de invitación nueva para esa persona (la anterior deja de servir). */
+  async function newInvite(req, member) {
+    const token = newToken();
+    await store.updateUser(member.id, { inviteTokenHash: hashToken(token), inviteExpiresAt: now() + INVITE_MS });
+    return { name: member.name, url: `${baseUrl(req)}/invitacion/${token}` };
+  }
+
+  /** La persona del equipo con ese id (del mismo negocio), o null. */
+  async function memberFor(req) {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    const member = await store.getUser(id);
+    return member && member.merchantId === req.merchant.id ? member : null;
+  }
+
+  team.get('/', wrap((req, res) => renderTeam(req, res)));
+
+  team.post(
+    '/',
+    form,
+    auth.checkForm,
+    wrap(async (req, res) => {
+      const values = {
+        nombre: String(req.body.nombre ?? '').trim(),
+        correo: String(req.body.correo ?? '').trim().toLowerCase(),
+        rol: req.body.rol === 'admin' ? 'admin' : 'seller',
+      };
+      const fail = (error, status = 422) => renderTeam(req, res, { error, values, status });
+      if (!(await store.hit(`invite:${req.merchant.id}`, { limit: 30, windowMs: 60 * MINUTE }))) return fail('Demasiadas invitaciones. Espera una hora.', 429);
+      if (!validName(values.nombre)) return fail('Escribe el nombre (hasta 60 caracteres).');
+      if (!EMAIL.test(values.correo)) return fail('Escribe un correo válido.');
+      if (await store.getUserByEmail(values.correo)) return fail('Ese correo ya tiene una cuenta de Cóbrale.');
+
+      let member;
+      try {
+        member = await store.createUser({ merchantId: req.merchant.id, role: values.rol, name: values.nombre, email: values.correo });
+      } catch (error) {
+        if (error.code === '23505') return fail('Ese correo ya tiene una cuenta de Cóbrale.');
+        throw error;
+      }
+      return renderTeam(req, res, { invite: await newInvite(req, member) });
+    }),
+  );
+
+  const memberAction = (run) =>
+    wrap(async (req, res) => {
+      const member = await memberFor(req);
+      if (!member) return renderTeam(req, res, { error: 'No encontramos a esa persona en tu equipo.', status: 404 });
+      if (member.id === req.user.id) return renderTeam(req, res, { error: 'No puedes cambiar tu propio rol ni desactivarte. Pídeselo a otro administrador.', status: 422 });
+      return run(req, res, member);
+    });
+
+  const LAST_ADMIN = 'El negocio necesita al menos un administrador activo.';
+
+  team.post(
+    '/:id/rol',
+    form,
+    auth.checkForm,
+    memberAction(async (req, res, member) => {
+      if (!member.active) return renderTeam(req, res, { error: 'Primero reactiva a esa persona.', status: 422 });
+      const result = await store.changeMember(req.merchant.id, member.id, { role: member.role === 'admin' ? 'seller' : 'admin' });
+      if (!result.ok) return renderTeam(req, res, { error: LAST_ADMIN, status: 422 });
+      return res.redirect(303, '/panel/equipo?ok=rol');
+    }),
+  );
+
+  team.post(
+    '/:id/desactivar',
+    form,
+    auth.checkForm,
+    memberAction(async (req, res, member) => {
+      const result = await store.changeMember(req.merchant.id, member.id, { deactivate: true });
+      if (!result.ok) return renderTeam(req, res, { error: LAST_ADMIN, status: 422 });
+      return res.redirect(303, '/panel/equipo?ok=desactivado');
+    }),
+  );
+
+  team.post(
+    '/:id/reactivar',
+    form,
+    auth.checkForm,
+    memberAction(async (req, res, member) => {
+      await store.updateUser(member.id, { active: true });
+      return res.redirect(303, '/panel/equipo?ok=reactivado');
+    }),
+  );
+
+  team.post(
+    '/:id/invitacion',
+    form,
+    auth.checkForm,
+    memberAction(async (req, res, member) => {
+      if (!member.active || member.passwordHash) return renderTeam(req, res, { error: 'Esa persona ya tiene su contraseña.', status: 422 });
+      return renderTeam(req, res, { invite: await newInvite(req, member) });
+    }),
+  );
+
+  panel.use('/equipo', team);
+
   web.use('/panel', panel);
 
   // Errores inesperados: una página sencilla, sin detalles internos.
   web.use((error, req, res, _next) => {
     log.error(`[web] ${req.method} ${req.originalUrl} falló: ${error.stack ?? error.message}`);
-    send(res, messagePage({ title: 'Algo salió mal', text: 'Intenta de nuevo en un momento.', merchant: req.merchant, csrf: req.csrfToken }), 500);
+    send(res, messagePage({ title: 'Algo salió mal', text: 'Intenta de nuevo en un momento.', user: req.user, csrf: req.csrfToken }), 500);
   });
 
   app.use(web);

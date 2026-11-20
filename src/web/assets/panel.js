@@ -20,6 +20,11 @@
     update();
   }
 
+  // Filtros que se aplican al elegir.
+  document.querySelectorAll('select[data-autosubmit]').forEach((select) => {
+    select.addEventListener('change', () => select.form.submit());
+  });
+
   // Copiar al portapapeles.
   document.querySelectorAll('[data-copy]').forEach((button) => {
     button.addEventListener('click', async () => {

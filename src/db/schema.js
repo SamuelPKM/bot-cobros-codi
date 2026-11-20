@@ -2,7 +2,7 @@
 // tabla schema_migrations recuerda cuáles ya corrieron. Para cambiar el
 // esquema se agrega una migración nueva al final, nunca se edita una vieja.
 
-const MIGRATIONS = [
+export const MIGRATIONS = [
   {
     id: 1,
     name: 'esquema inicial',
@@ -106,9 +106,60 @@ const MIGRATIONS = [
       CREATE INDEX demo_messages_by_session ON demo_messages (session_id, id);
     `,
   },
+  {
+    id: 2,
+    name: 'equipos: administradores y vendedores',
+    // Un negocio (merchants) tiene varias personas (users). El administrador
+    // también vende. El correo, la contraseña y el WhatsApp pasan de la
+    // cuenta del negocio a cada persona, y cada cobro recuerda quién lo hizo.
+    sql: `
+      CREATE TABLE users (
+        id                   SERIAL PRIMARY KEY,
+        merchant_id          INTEGER NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+        role                 TEXT NOT NULL CHECK (role IN ('admin', 'seller')),
+        name                 TEXT NOT NULL,
+        email                TEXT UNIQUE,
+        password_hash        TEXT,
+        whatsapp_phone       TEXT UNIQUE,
+        link_code            TEXT UNIQUE,
+        link_code_expires_at BIGINT,
+        invite_token_hash    TEXT UNIQUE,
+        invite_expires_at    BIGINT,
+        active               BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at           BIGINT NOT NULL
+      );
+      CREATE INDEX users_by_merchant ON users (merchant_id);
+
+      -- Cada negocio existente queda con su dueño como administrador.
+      INSERT INTO users (merchant_id, role, name, email, password_hash, whatsapp_phone, link_code, link_code_expires_at, created_at)
+      SELECT id, 'admin', business_name, email, password_hash, whatsapp_phone, link_code, link_code_expires_at, created_at
+        FROM merchants;
+
+      ALTER TABLE merchants DROP COLUMN email;
+      ALTER TABLE merchants DROP COLUMN password_hash;
+      ALTER TABLE merchants DROP COLUMN whatsapp_phone;
+      ALTER TABLE merchants DROP COLUMN link_code;
+      ALTER TABLE merchants DROP COLUMN link_code_expires_at;
+
+      -- Las sesiones ahora son de una persona. Las abiertas se cierran.
+      DROP TABLE sessions;
+      CREATE TABLE sessions (
+        token_hash   TEXT PRIMARY KEY,
+        user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        csrf_token   TEXT NOT NULL,
+        created_at   BIGINT NOT NULL,
+        expires_at   BIGINT NOT NULL
+      );
+      CREATE INDEX sessions_by_user ON sessions (user_id);
+
+      ALTER TABLE charges ADD COLUMN created_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      UPDATE charges c SET created_by = u.id FROM users u WHERE u.merchant_id = c.merchant_id AND u.role = 'admin';
+      CREATE INDEX charges_by_creator ON charges (created_by, created_at DESC);
+    `,
+  },
 ];
 
-export const TABLES = ['demo_messages', 'demo_sessions', 'rate_limits', 'events', 'charges', 'sessions', 'merchants'];
+export const TABLES = ['demo_messages', 'demo_sessions', 'rate_limits', 'events', 'charges', 'sessions', 'users', 'merchants'];
 
 /** Aplica las migraciones pendientes. Es seguro llamarla en cada arranque y desde varias instancias. */
 export async function migrate(db) {

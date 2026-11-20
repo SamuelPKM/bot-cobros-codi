@@ -20,6 +20,7 @@ describe('bot', () => {
   let bot;
   let charges;
   let merchant;
+  let admin;
   let owner;
 
   const say = (text, from = MERCHANT) => bot.handleMessage({ from, text });
@@ -46,7 +47,12 @@ describe('bot', () => {
     pey = fakePey();
     whatsapp = fakeWhatsApp();
     // Comerciante de confianza (sin límites del modo prueba) con su WhatsApp ligado.
-    merchant = await store.createMerchant({ businessName: 'Barbería Leo', whatsappPhone: MERCHANT_PHONE, isTrusted: true });
+    ({ merchant, user: admin } = await store.createMerchantWithAdmin({
+      businessName: 'Barbería Leo',
+      isTrusted: true,
+      name: 'Leo',
+      whatsappPhone: MERCHANT_PHONE,
+    }));
     owner = `m:${merchant.id}`;
     bot = makeBot();
   });
@@ -198,14 +204,14 @@ describe('bot', () => {
     });
 
     it('"vincular <código>" liga el número a la cuenta dueña del código', async () => {
-      const other = await store.createMerchant({ businessName: 'Tacos Ana' });
-      await store.updateMerchant(other.id, { linkCode: '123456', linkCodeExpiresAt: now() + 15 * MINUTE });
+      const { merchant: other, user: ana } = await store.createMerchantWithAdmin({ businessName: 'Tacos Ana', name: 'Ana' });
+      await store.updateUser(ana.id, { linkCode: '123456', linkCodeExpiresAt: now() + 15 * MINUTE });
 
       await say('Vincular 123456', '5215599990000');
 
-      assert.match(whatsapp.last(), /quedó ligado a \*Tacos Ana\*/);
-      assert.equal((await store.getMerchant(other.id)).whatsappPhone, '5599990000');
-      assert.equal((await store.getMerchant(other.id)).linkCode, null); // el código ya no sirve
+      assert.match(whatsapp.last(), /Listo, Ana: este WhatsApp quedó ligado a \*Tacos Ana\* como administrador/);
+      assert.equal((await store.getUser(ana.id)).whatsappPhone, '5599990000');
+      assert.equal((await store.getUser(ana.id)).linkCode, null); // el código ya no sirve
 
       // Sin CLABE propia queda en modo prueba: cobros pequeños.
       await say('cobra 0.50 a 5512345678 corte', '5215599990000');
@@ -213,15 +219,15 @@ describe('bot', () => {
     });
 
     it('rechaza un código de vinculación vencido o inexistente', async () => {
-      const other = await store.createMerchant({ businessName: 'Tacos Ana' });
-      await store.updateMerchant(other.id, { linkCode: '123456', linkCodeExpiresAt: now() + 15 * MINUTE });
+      const { user: ana } = await store.createMerchantWithAdmin({ businessName: 'Tacos Ana', name: 'Ana' });
+      await store.updateUser(ana.id, { linkCode: '123456', linkCodeExpiresAt: now() + 15 * MINUTE });
       now.advance(16 * MINUTE);
 
       await say('vincular 123456', '5215599990000');
       assert.match(whatsapp.last(), /no es válido o ya venció/);
       await say('vincular 999999', '5215599990000');
       assert.match(whatsapp.last(), /no es válido o ya venció/);
-      assert.equal((await store.getMerchant(other.id)).whatsappPhone, null);
+      assert.equal((await store.getUser(ana.id)).whatsappPhone, null);
     });
 
     it('responde con ayuda a saludos y a mensajes que no entiende', async () => {
@@ -653,6 +659,63 @@ describe('bot', () => {
       now.advance(24 * 60 * MINUTE);
       await say('resumen');
       assert.match(whatsapp.last(), /Hoy todavía no has enviado cobros/);
+    });
+  });
+
+  describe('equipo: administrador y vendedores', () => {
+    const SELLER = '5215533334444';
+    let ana;
+
+    beforeEach(async () => {
+      ana = await store.createUser({ merchantId: merchant.id, role: 'seller', name: 'Ana', email: 'ana@b.mx', passwordHash: 'x', whatsappPhone: '5533334444' });
+    });
+
+    it('el vendedor cobra desde su WhatsApp a nombre del negocio, y el "Pagado" le llega a él', async () => {
+      await say('cobra 150 a 5512345678 corte', SELLER);
+      await say('sí', SELLER);
+      const charge = await lastCharge();
+      assert.equal(charge.createdBy, ana.id);
+      assert.equal(charge.ownerKey, owner);
+      assert.match(pey.pushes[0].concept, /^Barbería Leo: corte/);
+
+      await store.markPaid(charge.id, { paidVia: 'push' });
+      await charges.notifyPaid(await store.getCharge(charge.id));
+      const notice = whatsapp.sent.find((m) => m.body.includes('Pagado'));
+      assert.equal(notice.to, SELLER);
+    });
+
+    it('los "sí" de una persona no confirman el cobro de otra', async () => {
+      await say('cobra 150 a 5512345678 corte', SELLER);
+      await say('sí'); // el administrador
+      assert.equal(pey.pushes.length, 0);
+      assert.match(whatsapp.last(), /No tienes ningún cobro por confirmar/);
+      await say('sí', SELLER);
+      assert.equal(pey.pushes.length, 1);
+    });
+
+    it('el vendedor ve su resumen; el administrador ve el del negocio por persona', async () => {
+      await say('cobra 150 a 5512345678 corte');
+      await say('sí');
+      await store.markPaid((await lastCharge()).id, { paidVia: 'push' });
+      await say('cobra 80 a 5587654321 barba', SELLER);
+      await say('sí', SELLER);
+      await store.markPaid((await lastCharge()).id, { paidVia: 'push' });
+
+      await say('resumen', SELLER);
+      assert.match(whatsapp.last(), /Cobrado: \$80\.00 en 1 cobro\b/);
+      assert.doesNotMatch(whatsapp.last(), /Por persona/);
+
+      await say('resumen');
+      const summary = whatsapp.last();
+      assert.match(summary, /Cobrado: \$230\.00 en 2 cobros/);
+      assert.match(summary, /\*Por persona\*\n• Leo: \$150\.00 en 1 cobro\n• Ana: \$80\.00 en 1 cobro/);
+    });
+
+    it('un vendedor desactivado ya no puede cobrar por WhatsApp', async () => {
+      await store.changeMember(merchant.id, ana.id, { deactivate: true });
+      await say('cobra 150 a 5512345678 corte', SELLER);
+      assert.match(whatsapp.last(), /todavía no está ligado/);
+      assert.equal((await store.listSince(owner, 0)).length, 0);
     });
   });
 });

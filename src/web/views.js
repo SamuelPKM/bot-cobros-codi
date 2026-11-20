@@ -29,6 +29,7 @@ export const STATUS = {
 };
 
 export const KIND = { push: 'Al celular', qr: 'QR', link: 'Liga' };
+export const ROLE = { admin: 'Administrador', seller: 'Vendedor' };
 
 export function statusChip(status) {
   const s = STATUS[status] ?? { label: status, tone: 'neutral' };
@@ -40,8 +41,8 @@ export const plain = (text) => String(text ?? '').replace(/\*([^*\n]+)\*/g, '$1'
 
 const csrfField = (csrf) => (csrf ? `<input type="hidden" name="_csrf" value="${h(csrf)}">` : '');
 
-function nav(merchant, csrf, active) {
-  if (!merchant) {
+function nav(user, csrf, active) {
+  if (!user) {
     return `<nav class="nav">
       <a href="/demo">Demo</a>
       <a href="/entrar">Entrar</a>
@@ -51,12 +52,14 @@ function nav(merchant, csrf, active) {
   const link = (href, label, key) => `<a href="${href}"${active === key ? ' aria-current="page"' : ''}>${label}</a>`;
   return `<nav class="nav">
     ${link('/panel', 'Cobros', 'panel')}
+    ${user.role === 'admin' ? link('/panel/equipo', 'Equipo', 'equipo') : ''}
     ${link('/panel/ajustes', 'Ajustes', 'ajustes')}
+    <span class="who">${h(user.name)} · ${h(ROLE[user.role])}</span>
     <form method="post" action="/salir" class="inline">${csrfField(csrf)}<button class="link-button" type="submit">Salir</button></form>
   </nav>`;
 }
 
-export function layout({ title, body, merchant = null, csrf = null, active = null, scripts = [] }) {
+export function layout({ title, body, user = null, csrf = null, active = null, scripts = [] }) {
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -70,8 +73,8 @@ ${scripts.map((src) => `<script src="${src}" defer></script>`).join('\n')}
 <body>
 <header class="topbar">
   <div class="wrap topbar-inner">
-    <a class="brand" href="${merchant ? '/panel' : '/'}">Cóbrale</a>
-    ${nav(merchant, csrf, active)}
+    <a class="brand" href="${user ? '/panel' : '/'}">Cóbrale</a>
+    ${nav(user, csrf, active)}
   </div>
 </header>
 <main class="wrap">
@@ -86,16 +89,16 @@ ${body}
 
 // ------------------------------------------------------------------ inicio
 
-export function landingPage({ merchant, demoEnabled }) {
+export function landingPage({ user, demoEnabled }) {
   return layout({
     title: 'Cobra con CoDi escribiendo un mensaje',
-    merchant,
+    user,
     body: `
 <section class="hero">
   <h1>Cobra con CoDi escribiendo un mensaje</h1>
   <p class="lead">Para quien vive de su oficio: manda un cobro desde WhatsApp o desde la web, y te avisamos en cuanto te pagan. Sin terminal, sin comisión por CoDi y sin instalar nada.</p>
   <div class="actions">
-    ${merchant ? '<a class="button" href="/panel">Ir a mis cobros</a>' : '<a class="button" href="/registro">Crear cuenta gratis</a>'}
+    ${user ? '<a class="button" href="/panel">Ir a mis cobros</a>' : '<a class="button" href="/registro">Crear cuenta gratis</a>'}
     ${demoEnabled ? '<a class="button button-secondary" href="/demo">Probar la demo</a>' : ''}
   </div>
 </section>
@@ -118,8 +121,8 @@ export function landingPage({ merchant, demoEnabled }) {
 <section class="card">
   <h2>Cómo funciona</h2>
   <ol class="steps">
-    <li><strong>Crea tu cuenta</strong> con tu correo y el nombre de tu negocio.</li>
-    <li><strong>Liga tu WhatsApp</strong> desde Ajustes, si quieres cobrar desde el chat. También puedes cobrar desde la web.</li>
+    <li><strong>Crea tu cuenta</strong> con tu correo y el nombre de tu negocio. Quedas como administrador, y también puedes cobrar.</li>
+    <li><strong>Invita a tu equipo</strong> si tienes vendedores: cada quien cobra con su cuenta y su WhatsApp, y tú ves lo de todos.</li>
     <li><strong>Registra tu CLABE</strong> para que los pagos te lleguen directo. Mientras Banxico la valida, puedes probar con montos pequeños.</li>
   </ol>
 </section>`,
@@ -146,6 +149,10 @@ export function authPage({ mode, error = null, values = {}, next = '', registrat
         ? `<label>Nombre de tu negocio
       <input name="negocio" required maxlength="60" autocomplete="organization" value="${h(values.negocio)}" placeholder="Barbería Leo">
       <small>Es lo que ve tu cliente en su banco al pagar.</small>
+    </label>
+    <label>Tu nombre
+      <input name="nombre" required maxlength="60" autocomplete="name" value="${h(values.nombre)}" placeholder="Leonardo">
+      <small>Quedas como administrador del negocio. Después puedes invitar a tus vendedores.</small>
     </label>`
         : ''
     }
@@ -167,7 +174,7 @@ export function authPage({ mode, error = null, values = {}, next = '', registrat
 
 // ------------------------------------------------------------------- panel
 
-function modeBanner(merchant, limits) {
+function modeBanner(merchant, limits, user) {
   if (merchant.isDemo) {
     return `<p class="alert alert-info">Cuenta de demostración: los cobros son reales y de hasta ${money(limits.maxAmountCents)}. El dinero llega a la cuenta del proyecto.</p>`;
   }
@@ -176,42 +183,102 @@ function modeBanner(merchant, limits) {
   const pending = merchant.bankStatus === 'PENDING' || merchant.bankStatus === 'PROCESSING';
   return `<p class="alert alert-info">Modo prueba: cobros de hasta ${money(limits.maxAmountCents)}, que llegan a la cuenta del proyecto. ${
     pending
-      ? 'Tu CLABE está en validación con Banxico (hasta 5 días hábiles).'
-      : '<a href="/panel/ajustes#clabe">Registra tu CLABE</a> para cobrar a tu nombre y sin límite.'
+      ? 'La CLABE del negocio está en validación con Banxico (hasta 5 días hábiles).'
+      : user.role === 'admin'
+        ? '<a href="/panel/ajustes#clabe">Registra la CLABE del negocio</a> para cobrar a su nombre y sin límite.'
+        : 'Cuando el administrador registre la CLABE del negocio, los cobros llegarán directo y sin límite.'
   }</p>`;
 }
 
-export function chargeRow(charge) {
+/** @param names Map de id de persona -> nombre; con él se agrega la columna "Vendió". */
+export function chargeRow(charge, names = null) {
   const who = charge.payerPhone ? phone(charge.payerPhone) : KIND[charge.kind];
   return `<tr data-id="${charge.id}" data-status="${h(charge.status)}">
     <td><a href="/panel/cobros/${charge.id}">${h(money(charge.amountCents))}</a></td>
     <td>${h(charge.concept ?? '—')}</td>
     <td>${h(who)}</td>
+    ${names ? `<td>${h(names.get(charge.createdBy) ?? '—')}</td>` : ''}
     <td class="status-cell">${statusChip(charge.status)}</td>
     <td class="muted">${h(formatDateTime(charge.createdAt))}</td>
   </tr>`;
 }
 
-export function panelPage({ merchant, csrf, limits, summary, charges, flash = null, error = null, values = {}, canLink }) {
+/** Desglose del día por persona, para el administrador. */
+function bySellerCard(bySeller, filterUserId) {
+  if (!bySeller) return '';
+  return `<section class="card">
+  <h2>Hoy por persona</h2>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Persona</th><th>Cobrado</th><th>Cobros pagados</th><th>Pendientes</th><th></th></tr></thead>
+    <tbody>${bySeller
+      .map(
+        (s) => `<tr>
+      <td>${h(s.name)} <span class="muted">· ${h(ROLE[s.role])}</span></td>
+      <td>${h(money(s.paidCents))}</td>
+      <td>${s.paidCount}</td>
+      <td>${s.pendingCount}</td>
+      <td>${filterUserId === s.userId ? '<span class="muted">viendo</span>' : `<a href="/panel?persona=${s.userId}#ultimos">Ver sus cobros</a>`}</td>
+    </tr>`,
+      )
+      .join('')}</tbody>
+  </table></div>
+</section>`;
+}
+
+/**
+ * @param team el equipo (solo para el administrador): filtro y columna "Vendió".
+ * @param filterUserId la persona cuyos cobros se están viendo, o null para todos.
+ */
+export function panelPage({
+  user,
+  merchant,
+  csrf,
+  limits,
+  summary,
+  charges,
+  team = null,
+  filterUserId = null,
+  flash = null,
+  error = null,
+  values = {},
+  canLink,
+}) {
   const kind = values.tipo ?? 'push';
+  const isAdmin = user.role === 'admin';
+  const names = isAdmin && team ? new Map(team.map((u) => [u.id, u.name])) : null;
   const radio = (value, label) =>
     `<label class="radio"><input type="radio" name="tipo" value="${value}"${kind === value ? ' checked' : ''}> ${label}</label>`;
+  const filter =
+    isAdmin && team && team.length > 1
+      ? `<form method="get" action="/panel" class="filter">
+      <label>Ver cobros de
+        <select name="persona" data-autosubmit>
+          <option value="">Todo el equipo</option>
+          ${team.map((u) => `<option value="${u.id}"${filterUserId === u.id ? ' selected' : ''}>${h(u.name)}${u.active ? '' : ' (desactivado)'}</option>`).join('')}
+        </select>
+      </label>
+      <noscript><button class="button button-small" type="submit">Ver</button></noscript>
+    </form>`
+      : '';
+  const csvHref = `/panel/cobros.csv${filterUserId ? `?persona=${filterUserId}` : ''}`;
   return layout({
     title: 'Cobros',
-    merchant,
+    user,
     csrf,
     active: 'panel',
     scripts: ['/assets/panel.js'],
     body: `
 <h1>${h(merchant.businessName)}</h1>
-${modeBanner(merchant, limits)}
+<p class="muted subtitle">Hola, ${h(user.name)}. ${isAdmin ? 'Ves los cobros de todo el negocio.' : 'Ves tus cobros.'}</p>
+${modeBanner(merchant, limits, user)}
 ${flash ? `<p class="alert alert-ok" role="status">${h(flash)}</p>` : ''}
 
 <section class="stats" aria-label="Hoy">
-  <div class="stat"><span class="stat-label">Cobrado hoy</span><span class="stat-value" id="stat-paid">${h(money(summary.totalPaidCents))}</span></div>
+  <div class="stat"><span class="stat-label">${isAdmin ? 'Cobrado hoy' : 'Cobraste hoy'}</span><span class="stat-value" id="stat-paid">${h(money(summary.totalPaidCents))}</span></div>
   <div class="stat"><span class="stat-label">Pendientes</span><span class="stat-value" id="stat-pending">${summary.pending.length}</span></div>
   <div class="stat"><span class="stat-label">Expirados hoy</span><span class="stat-value" id="stat-expired">${summary.expiredCount}</span></div>
 </section>
+${isAdmin ? bySellerCard(summary.bySeller, filterUserId) : ''}
 
 <section class="card">
   <h2>Nuevo cobro</h2>
@@ -240,17 +307,17 @@ ${flash ? `<p class="alert alert-ok" role="status">${h(flash)}</p>` : ''}
   </form>
 </section>
 
-<section class="card">
+<section class="card" id="ultimos">
   <div class="card-head">
-    <h2>Últimos cobros</h2>
-    <a class="muted" href="/panel/cobros.csv">Descargar CSV</a>
+    <h2>${isAdmin ? 'Últimos cobros' : 'Tus últimos cobros'}</h2>
+    <div class="card-tools">${filter}<a class="muted" href="${csvHref}">Descargar CSV</a></div>
   </div>
   ${
     charges.length === 0
       ? '<p class="muted" id="empty">Todavía no hay cobros. Crea el primero arriba.</p>'
       : `<div class="table-wrap"><table class="table" id="charges">
-    <thead><tr><th>Monto</th><th>Concepto</th><th>A quién</th><th>Estado</th><th>Creado</th></tr></thead>
-    <tbody>${charges.map(chargeRow).join('')}</tbody>
+    <thead><tr><th>Monto</th><th>Concepto</th><th>A quién</th>${names ? '<th>Vendió</th>' : ''}<th>Estado</th><th>Creado</th></tr></thead>
+    <tbody>${charges.map((c) => chargeRow(c, names)).join('')}</tbody>
   </table></div>`
   }
 </section>`,
@@ -259,7 +326,7 @@ ${flash ? `<p class="alert alert-ok" role="status">${h(flash)}</p>` : ''}
 
 // --------------------------------------------------------- detalle de cobro
 
-export function chargePage({ merchant, csrf, charge, qrDataUrl = null, flash = null, error = null, canLink }) {
+export function chargePage({ user, csrf, charge, creatorName = null, qrDataUrl = null, flash = null, error = null, canLink }) {
   const post = (action, label, cls = 'button') =>
     `<form method="post" action="/panel/cobros/${charge.id}/${action}" class="inline">${csrfField(csrf)}<button class="${cls}" type="submit">${label}</button></form>`;
 
@@ -300,7 +367,7 @@ export function chargePage({ merchant, csrf, charge, qrDataUrl = null, flash = n
 
   return layout({
     title: `Cobro de ${money(charge.amountCents)}`,
-    merchant,
+    user,
     csrf,
     active: 'panel',
     scripts: ['/assets/panel.js'],
@@ -318,6 +385,7 @@ export function chargePage({ merchant, csrf, charge, qrDataUrl = null, flash = n
     <dt>Forma de cobro</dt><dd>${h(KIND[charge.kind] ?? charge.kind)}</dd>
     ${charge.payerPhone ? `<dt>Cliente</dt><dd>${h(phone(charge.payerPhone))}</dd>` : ''}
     <dt>Creado</dt><dd>${h(formatDateTime(charge.createdAt))} desde ${h(charge.channel === 'whatsapp' ? 'WhatsApp' : 'la web')}</dd>
+    ${creatorName ? `<dt>Vendió</dt><dd>${h(creatorName)}</dd>` : ''}
     <dt>Folio</dt><dd>${charge.id}</dd>
   </dl>
 </section>`,
@@ -333,18 +401,21 @@ const BANK_STATUS = {
   ERROR: 'Rechazada',
 };
 
-export function settingsPage({ merchant, csrf, flash = null, error = null, linkCode = null, whatsappNumber = null, values = {} }) {
-  const bank = merchant.bankAccountId
+export function settingsPage({ user, merchant, csrf, flash = null, error = null, linkCode = null, whatsappNumber = null, values = {} }) {
+  const isAdmin = user.role === 'admin';
+  const bankState = merchant.bankAccountId
     ? `<p>CLABE terminación <strong>${h(merchant.bankClabeLast4)}</strong> a nombre de ${h(merchant.bankHolder)}: <strong>${h(
         BANK_STATUS[merchant.bankStatus] ?? merchant.bankStatus,
       )}</strong>.</p>
-      ${merchant.bankStatus === 'ERROR' ? `<p class="alert alert-bad">${h(merchant.bankError ?? 'Banxico rechazó la cuenta.')} Revisa los datos y regístrala otra vez.</p>` : ''}`
-    : '<p>Todavía no registras una CLABE. Mientras tanto estás en modo prueba: cobros pequeños que llegan a la cuenta del proyecto.</p>';
-  const canRegisterBank = !merchant.bankAccountId || merchant.bankStatus === 'ERROR';
+      ${merchant.bankStatus === 'ERROR' ? `<p class="alert alert-bad">${h(merchant.bankError ?? 'Banxico rechazó la cuenta.')} ${isAdmin ? 'Revisa los datos y regístrala otra vez.' : ''}</p>` : ''}`
+    : `<p>El negocio todavía no registra una CLABE. Mientras tanto está en modo prueba: cobros pequeños que llegan a la cuenta del proyecto.${
+        isAdmin ? '' : ' Solo un administrador puede registrarla.'
+      }</p>`;
+  const canRegisterBank = isAdmin && (!merchant.bankAccountId || merchant.bankStatus === 'ERROR');
 
   return layout({
     title: 'Ajustes',
-    merchant,
+    user,
     csrf,
     active: 'ajustes',
     scripts: ['/assets/panel.js'],
@@ -354,37 +425,53 @@ ${flash ? `<p class="alert alert-ok" role="status">${h(flash)}</p>` : ''}
 ${error ? `<p class="alert alert-bad" role="alert">${h(error)}</p>` : ''}
 
 <section class="card">
-  <h2>Tu negocio</h2>
-  <form method="post" action="/panel/ajustes/negocio" class="form">
+  <h2>Tus datos</h2>
+  <form method="post" action="/panel/ajustes/perfil" class="form">
     ${csrfField(csrf)}
-    <label>Nombre del negocio
-      <input name="negocio" required maxlength="60" value="${h(merchant.businessName)}">
-      <small>Es lo que ve tu cliente en su banco al pagar.</small>
+    <label>Tu nombre
+      <input name="nombre" required maxlength="60" value="${h(user.name)}">
+      <small>Así te ve tu equipo en los cobros. Entras con ${h(user.email)} como ${h(ROLE[user.role].toLowerCase())}.</small>
     </label>
     <button class="button" type="submit">Guardar</button>
   </form>
 </section>
 
 <section class="card" id="whatsapp">
-  <h2>WhatsApp</h2>
+  <h2>Tu WhatsApp</h2>
   ${
-    merchant.whatsappPhone
-      ? `<p>Ligado al <strong>${h(phone(merchant.whatsappPhone))}</strong>. Desde ese número puedes escribirle al bot <code>cobra 150 a 5512345678 corte</code>.</p>
+    user.whatsappPhone
+      ? `<p>Ligado al <strong>${h(phone(user.whatsappPhone))}</strong>. Desde ese número le escribes al bot <code>cobra 150 a 5512345678 corte</code>, y los cobros quedan a tu nombre.</p>
       <form method="post" action="/panel/ajustes/whatsapp/quitar" class="inline">${csrfField(csrf)}<button class="button button-secondary" type="submit">Desligar</button></form>`
-      : '<p>Liga tu WhatsApp para cobrar escribiéndole al bot.</p>'
+      : '<p>Liga tu WhatsApp para cobrar escribiéndole al bot. Los avisos de "Pagado" de tus cobros te llegan ahí.</p>'
   }
   ${
     linkCode
       ? `<p class="alert alert-info">Desde tu WhatsApp, manda este mensaje${whatsappNumber ? ` al <strong>${h(whatsappNumber)}</strong>` : ' al número de Cóbrale'}: <code class="big-code">vincular ${h(linkCode)}</code> El código vence en 15 minutos.</p>`
       : `<form method="post" action="/panel/ajustes/whatsapp/codigo" class="inline">${csrfField(csrf)}<button class="button" type="submit">${
-          merchant.whatsappPhone ? 'Ligar otro número' : 'Ligar mi WhatsApp'
+          user.whatsappPhone ? 'Ligar otro número' : 'Ligar mi WhatsApp'
         }</button></form>`
+  }
+</section>
+
+<section class="card">
+  <h2>El negocio</h2>
+  ${
+    isAdmin
+      ? `<form method="post" action="/panel/ajustes/negocio" class="form">
+    ${csrfField(csrf)}
+    <label>Nombre del negocio
+      <input name="negocio" required maxlength="60" value="${h(merchant.businessName)}">
+      <small>Es lo que ve el cliente en su banco al pagar, en los cobros de todo el equipo.</small>
+    </label>
+    <button class="button" type="submit">Guardar</button>
+  </form>`
+      : `<p><strong>${h(merchant.businessName)}</strong>. Solo un administrador puede cambiar el nombre.</p>`
   }
 </section>
 
 <section class="card" id="clabe">
   <h2>Cuenta para recibir pagos</h2>
-  ${bank}
+  ${bankState}
   ${
     canRegisterBank
       ? `<form method="post" action="/panel/ajustes/clabe" class="form">
@@ -400,7 +487,7 @@ ${error ? `<p class="alert alert-bad" role="alert">${h(error)}</p>` : ''}
       <label class="radio"><input type="radio" name="entidad" value="PERSON"${values.entidad !== 'BUSINESS' ? ' checked' : ''}> Persona física</label>
       <label class="radio"><input type="radio" name="entidad" value="BUSINESS"${values.entidad === 'BUSINESS' ? ' checked' : ''}> Empresa</label>
     </fieldset>
-    <p class="muted">Banxico valida la cuenta en hasta 5 días hábiles. Cuando quede activa, tus cobros por celular y QR te llegarán directo y sin el límite del modo prueba.</p>
+    <p class="muted">Banxico valida la cuenta en hasta 5 días hábiles. Cuando quede activa, los cobros por celular y QR de todo el equipo llegarán directo y sin el límite del modo prueba.</p>
     <button class="button" type="submit">Registrar CLABE</button>
   </form>`
       : ''
@@ -409,6 +496,128 @@ ${error ? `<p class="alert alert-bad" role="alert">${h(error)}</p>` : ''}
   });
 }
 
-export function messagePage({ title, text, merchant = null, csrf = null }) {
-  return layout({ title, merchant, csrf, body: `<section class="card narrow"><h1>${h(title)}</h1><p>${h(text)}</p></section>` });
+// ------------------------------------------------------------------- equipo
+
+function teamStatus(member) {
+  if (!member.active) return '<span class="chip chip-muted">Desactivado</span>';
+  if (!member.passwordHash) return '<span class="chip chip-warn">Invitación pendiente</span>';
+  return '<span class="chip chip-ok">Activo</span>';
+}
+
+export function teamPage({ user, merchant, csrf, team, invite = null, flash = null, error = null, values = {} }) {
+  const post = (action, id, label, cls = 'link-button') =>
+    `<form method="post" action="/panel/equipo/${id}/${action}" class="inline">${csrfField(csrf)}<button class="${cls}" type="submit">${label}</button></form>`;
+  const rows = team
+    .map((m) => {
+      const self = m.id === user.id;
+      const actions = self
+        ? '<span class="muted">tú</span>'
+        : !m.active
+          ? post('reactivar', m.id, 'Reactivar')
+          : [
+              m.role === 'admin' ? post('rol', m.id, 'Hacer vendedor') : post('rol', m.id, 'Hacer administrador'),
+              !m.passwordHash ? post('invitacion', m.id, 'Nueva liga') : '',
+              post('desactivar', m.id, 'Desactivar'),
+            ]
+              .filter(Boolean)
+              .join('<span class="sep">·</span>');
+      return `<tr>
+      <td>${h(m.name)}</td>
+      <td>${h(m.email ?? '—')}</td>
+      <td>${h(ROLE[m.role])}</td>
+      <td>${m.whatsappPhone ? h(phone(m.whatsappPhone)) : '<span class="muted">sin ligar</span>'}</td>
+      <td>${teamStatus(m)}</td>
+      <td class="actions-cell">${actions}</td>
+    </tr>`;
+    })
+    .join('');
+  const role = values.rol === 'admin' ? 'admin' : 'seller';
+
+  return layout({
+    title: 'Equipo',
+    user,
+    csrf,
+    active: 'equipo',
+    scripts: ['/assets/panel.js'],
+    body: `
+<h1>Equipo de ${h(merchant.businessName)}</h1>
+<p class="muted subtitle">Cada persona cobra con su cuenta y su WhatsApp. Los vendedores ven solo sus cobros; los administradores ven los de todos, administran el equipo y la cuenta del negocio, y también cobran.</p>
+${flash ? `<p class="alert alert-ok" role="status">${h(flash)}</p>` : ''}
+${error ? `<p class="alert alert-bad" role="alert">${h(error)}</p>` : ''}
+${
+  invite
+    ? `<div class="alert alert-info">
+    <p>Comparte esta liga con <strong>${h(invite.name)}</strong> por WhatsApp o correo. Con ella elige su contraseña. Vence en 7 días y sirve una sola vez.</p>
+    <div class="copy">
+      <input readonly value="${h(invite.url)}" id="invite-url" aria-label="Liga de invitación">
+      <button class="button" type="button" data-copy="#invite-url">Copiar</button>
+    </div>
+  </div>`
+    : ''
+}
+
+<section class="card">
+  <h2>Personas</h2>
+  <div class="table-wrap"><table class="table" id="team">
+    <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>WhatsApp</th><th>Estado</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>
+</section>
+
+<section class="card">
+  <h2>Invitar a alguien</h2>
+  <form method="post" action="/panel/equipo" class="form">
+    ${csrfField(csrf)}
+    <div class="row row-2">
+      <label>Nombre
+        <input name="nombre" required maxlength="60" value="${h(values.nombre)}" placeholder="Ana">
+      </label>
+      <label>Correo
+        <input name="correo" type="email" required value="${h(values.correo)}" placeholder="ana@ejemplo.com">
+      </label>
+    </div>
+    <fieldset class="radios">
+      <legend>Rol</legend>
+      <label class="radio"><input type="radio" name="rol" value="seller"${role === 'seller' ? ' checked' : ''}> Vendedor: cobra y ve sus cobros</label>
+      <label class="radio"><input type="radio" name="rol" value="admin"${role === 'admin' ? ' checked' : ''}> Administrador: además ve todo y administra</label>
+    </fieldset>
+    <button class="button" type="submit">Crear invitación</button>
+  </form>
+</section>`,
+  });
+}
+
+// --------------------------------------------------------------- invitación
+
+export function invitePage({ invitee = null, merchantName = null, error = null, values = {}, token = '', csrf = null }) {
+  if (!invitee) {
+    return layout({
+      title: 'Invitación',
+      body: `<section class="card narrow"><h1>Esta invitación ya no sirve</h1><p>Venció o ya se usó. Pídele al administrador de tu negocio una nueva.</p><p><a href="/entrar">Entrar</a></p></section>`,
+    });
+  }
+  return layout({
+    title: 'Únete al equipo',
+    body: `
+<section class="card narrow">
+  <h1>Únete a ${h(merchantName)}</h1>
+  <p>Te invitaron como <strong>${h(ROLE[invitee.role].toLowerCase())}</strong>. Entrarás con <strong>${h(invitee.email)}</strong>.</p>
+  ${error ? `<p class="alert alert-bad" role="alert">${h(error)}</p>` : ''}
+  <form method="post" action="/invitacion/${h(token)}" class="form">
+    ${csrf ? csrfField(csrf) : ''}
+    <label>Tu nombre
+      <input name="nombre" required maxlength="60" autocomplete="name" value="${h(values.nombre ?? invitee.name)}">
+    </label>
+    <label>Elige una contraseña
+      <input name="contrasena" type="password" required minlength="10" autocomplete="new-password">
+      <small>Al menos 10 caracteres.</small>
+    </label>
+    <button class="button" type="submit">Entrar al equipo</button>
+  </form>
+</section>`,
+  });
+}
+
+export function messagePage({ title, text, user = null, csrf = null }) {
+  return layout({ title, user, csrf, body: `<section class="card narrow"><h1>${h(title)}</h1><p>${h(text)}</p></section>` });
 }

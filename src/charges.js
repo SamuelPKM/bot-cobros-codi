@@ -53,15 +53,22 @@ export function createCharges({
 
   /**
    * Quién cobra y con qué reglas.
-   * @param merchant fila de `merchants`, o null para una sesión de la demo.
+   * @param merchant fila de `merchants` (el negocio), o null para una sesión de la demo.
+   * @param user la persona que cobra (administrador o vendedor), o null en la demo.
    * @param channel 'web' | 'whatsapp' | 'demo' | 'script'
    * @param notifyTo a dónde avisar pagos (número de WhatsApp o 'demo:<sesión>').
+   *
+   * Los cobros son del negocio (ownerKey). Cada cobro recuerda quién lo hizo
+   * (userId): un vendedor ve y opera solo los suyos; un administrador, todos.
    */
-  function contextFor(merchant, { channel, notifyTo = null, demoSession = null, demoName = null }) {
+  function contextFor(merchant, { channel, user = null, notifyTo = null, demoSession = null, demoName = null }) {
     if (!merchant) {
       return {
         merchantId: null,
         ownerKey: `demo:${demoSession}`,
+        userId: null,
+        isAdmin: true, // la demo es una sola persona: ve todo lo suyo
+        viewUserId: null,
         name: demoName,
         channel,
         notifyTo,
@@ -70,9 +77,14 @@ export function createCharges({
       };
     }
     const ownBank = merchant.bankStatus === 'ACTIVE' ? merchant.bankAccountId : null;
+    const isAdmin = user?.role === 'admin';
     return {
       merchantId: merchant.id,
       ownerKey: `m:${merchant.id}`,
+      userId: user?.id ?? null,
+      isAdmin,
+      // Qué cobros ve: todos los del negocio (administrador) o solo los propios (vendedor).
+      viewUserId: isAdmin ? null : (user?.id ?? null),
       name: merchant.businessName,
       channel,
       notifyTo,
@@ -80,6 +92,12 @@ export function createCharges({
       limited: merchant.isDemo || !(merchant.isTrusted || ownBank),
       bankAccountId: ownBank,
     };
+  }
+
+  /** ¿Esta persona puede ver o actuar sobre este cobro? */
+  function canAccess(ctx, charge) {
+    if (!charge || charge.ownerKey !== ctx.ownerKey) return false;
+    return ctx.isAdmin || charge.createdBy === ctx.userId;
   }
 
   /** Revisa los límites del modo prueba. Devuelve el texto del rechazo o null. */
@@ -100,10 +118,14 @@ export function createCharges({
     log.error(`[cobros] cobro ${charge.id}: falló ${what} (${error.type ?? error.name}): ${error.message}${requestId}`);
   }
 
+  /**
+   * El cobro sobre el que se actúa. Sin id (WhatsApp: "sí", "no", "liga") es el
+   * más reciente de esa misma persona: un vendedor nunca confirma el borrador de otro.
+   */
   async function ownedCharge(ctx, chargeId, statuses) {
-    if (chargeId == null) return store.latestCharge(ctx.ownerKey, statuses);
+    if (chargeId == null) return store.latestCharge(ctx.ownerKey, statuses, ctx.userId);
     const charge = await store.getCharge(chargeId);
-    return charge && charge.ownerKey === ctx.ownerKey && statuses.includes(charge.status) ? charge : null;
+    return canAccess(ctx, charge) && statuses.includes(charge.status) ? charge : null;
   }
 
   // ---------------------------------------------------------------- push
@@ -113,7 +135,7 @@ export function createCharges({
     const limited = await limitFor(ctx, { amountCents, payerPhone });
     if (limited) return fail('limit', limited);
 
-    await store.cancelAwaiting(ctx.ownerKey);
+    await store.cancelAwaiting(ctx.ownerKey, ctx.userId);
     const charge = await store.createCharge({
       kind: 'push',
       channel: ctx.channel,
@@ -124,6 +146,7 @@ export function createCharges({
       amountCents,
       concept,
       status: 'awaiting_confirmation',
+      createdBy: ctx.userId,
     });
     return { ok: true, charge, message: texts.confirmPrompt(charge) };
   }
@@ -204,6 +227,7 @@ export function createCharges({
       concept,
       status: 'creating',
       bankAccountId: ctx.bankAccountId,
+      createdBy: ctx.userId,
     });
   }
 
@@ -289,16 +313,45 @@ export function createCharges({
 
   // ----------------------------------------------------------- consultas
 
+  /**
+   * Lo de hoy: del negocio para un administrador, propio para un vendedor. Al
+   * administrador de un negocio con equipo le agrega el desglose por persona.
+   */
   async function summary(ctx) {
     const today = dayKey(now());
-    const charges = (await store.listSince(ctx.ownerKey, now() - 36 * HOUR_MS)).filter((c) => dayKey(c.createdAt) === today);
+    const charges = (await store.listSince(ctx.ownerKey, now() - 36 * HOUR_MS, ctx.viewUserId)).filter(
+      (c) => dayKey(c.createdAt) === today,
+    );
+    const isPending = (c) => ['pending', 'unknown', 'link', 'qr'].includes(c.status);
     const paid = charges.filter((c) => c.status === 'paid');
-    return {
+    const result = {
       paid,
-      pending: charges.filter((c) => ['pending', 'unknown', 'link', 'qr'].includes(c.status)),
+      pending: charges.filter(isPending),
       expiredCount: charges.filter((c) => c.status === 'expired').length,
       totalPaidCents: paid.reduce((sum, c) => sum + c.amountCents, 0),
+      bySeller: null,
     };
+
+    if (ctx.isAdmin && ctx.merchantId) {
+      const team = (await store.listUsers(ctx.merchantId)).filter((u) => u.active || charges.some((c) => c.createdBy === u.id));
+      if (team.length > 1) {
+        result.bySeller = team
+          .map((u) => {
+            const mine = charges.filter((c) => c.createdBy === u.id);
+            const minePaid = mine.filter((c) => c.status === 'paid');
+            return {
+              userId: u.id,
+              name: u.name,
+              role: u.role,
+              paidCount: minePaid.length,
+              paidCents: minePaid.reduce((sum, c) => sum + c.amountCents, 0),
+              pendingCount: mine.filter(isPending).length,
+            };
+          })
+          .sort((a, b) => b.paidCents - a.paidCents || a.name.localeCompare(b.name));
+      }
+    }
+    return result;
   }
 
   /** El PNG del QR de un cobro, para mostrarlo otra vez (por ejemplo en la web). */
@@ -450,6 +503,7 @@ export function createCharges({
 
   return {
     contextFor,
+    canAccess,
     draftPush,
     confirmPush,
     cancelPush,

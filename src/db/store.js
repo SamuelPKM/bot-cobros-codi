@@ -33,17 +33,14 @@ const CHARGE_COLUMNS = {
   expiresAt: 'expires_at',
   paidAt: 'paid_at',
   notifiedAt: 'notified_at',
+  createdBy: 'created_by',
 };
 
+// Un negocio. Sus personas (administradores y vendedores) están en `users`.
 const MERCHANT_COLUMNS = {
-  email: 'email',
-  passwordHash: 'password_hash',
   businessName: 'business_name',
-  whatsappPhone: 'whatsapp_phone',
   isDemo: 'is_demo',
   isTrusted: 'is_trusted',
-  linkCode: 'link_code',
-  linkCodeExpiresAt: 'link_code_expires_at',
   bankAccountId: 'bank_account_id',
   bankStatus: 'bank_status',
   bankError: 'bank_error',
@@ -62,8 +59,25 @@ function mapper(columns) {
   };
 }
 
+// Una persona de un negocio. El administrador también vende.
+const USER_COLUMNS = {
+  merchantId: 'merchant_id',
+  role: 'role',
+  name: 'name',
+  email: 'email',
+  passwordHash: 'password_hash',
+  whatsappPhone: 'whatsapp_phone',
+  linkCode: 'link_code',
+  linkCodeExpiresAt: 'link_code_expires_at',
+  inviteTokenHash: 'invite_token_hash',
+  inviteExpiresAt: 'invite_expires_at',
+  active: 'active',
+  createdAt: 'created_at',
+};
+
 const toCharge = mapper(CHARGE_COLUMNS);
 const toMerchant = mapper(MERCHANT_COLUMNS);
+const toUser = mapper(USER_COLUMNS);
 
 /** Arma "a = $2, b = $3" a partir de { a, b }, validando los nombres. */
 function assignments(columns, fields, offset = 1) {
@@ -94,11 +108,12 @@ export function createStore(db, { now = Date.now } = {}) {
       concept = null,
       status,
       bankAccountId = null,
+      createdBy = null,
     }) {
       const row = await db.one(
-        `INSERT INTO charges (kind, channel, merchant_id, owner_key, notify_to, payer_phone, amount_cents, concept, status, bank_account_id, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-        [kind, channel, merchantId, ownerKey, notifyTo, payerPhone, amountCents, concept, status, bankAccountId, now()],
+        `INSERT INTO charges (kind, channel, merchant_id, owner_key, notify_to, payer_phone, amount_cents, concept, status, bank_account_id, created_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+        [kind, channel, merchantId, ownerKey, notifyTo, payerPhone, amountCents, concept, status, bankAccountId, createdBy, now()],
       );
       return toCharge(row);
     },
@@ -146,20 +161,26 @@ export function createStore(db, { now = Date.now } = {}) {
       return Boolean(row);
     },
 
-    async latestCharge(ownerKey, statuses) {
+    /**
+     * El cobro más reciente en esos estados. `createdBy` lo limita a los de una
+     * persona: cada vendedor confirma sus propios borradores, no los de otro.
+     */
+    async latestCharge(ownerKey, statuses, createdBy = null) {
       return toCharge(
         await db.one(
-          `SELECT * FROM charges WHERE owner_key = $1 AND status = ANY($2)
+          `SELECT * FROM charges WHERE owner_key = $1 AND status = ANY($2) AND ($3::int IS NULL OR created_by = $3)
            ORDER BY created_at DESC, id DESC LIMIT 1`,
-          [ownerKey, statuses],
+          [ownerKey, statuses, createdBy],
         ),
       );
     },
 
-    async cancelAwaiting(ownerKey) {
-      await db.query(`UPDATE charges SET status = 'cancelled' WHERE owner_key = $1 AND status = 'awaiting_confirmation'`, [
-        ownerKey,
-      ]);
+    async cancelAwaiting(ownerKey, createdBy = null) {
+      await db.query(
+        `UPDATE charges SET status = 'cancelled'
+          WHERE owner_key = $1 AND status = 'awaiting_confirmation' AND ($2::int IS NULL OR created_by = $2)`,
+        [ownerKey, createdBy],
+      );
     },
 
     /** Cobros enviados cuyo plazo ya venció. */
@@ -202,29 +223,30 @@ export function createStore(db, { now = Date.now } = {}) {
       ).map(toCharge);
     },
 
-    async listSince(ownerKey, sinceMs) {
-      return (
-        await db.query('SELECT * FROM charges WHERE owner_key = $1 AND created_at >= $2 ORDER BY id', [ownerKey, sinceMs])
-      ).map(toCharge);
-    },
-
-    /** Los cobros más recientes de un dueño, para el panel. `beforeId` pagina hacia atrás. */
-    async listCharges(ownerKey, { limit = 50, beforeId = null } = {}) {
+    /** Cobros desde `sinceMs`: los del negocio, o solo los de una persona con `createdBy`. */
+    async listSince(ownerKey, sinceMs, createdBy = null) {
       return (
         await db.query(
-          `SELECT * FROM charges
-            WHERE owner_key = $1 AND status NOT IN ('awaiting_confirmation', 'cancelled')
-              AND ($2::int IS NULL OR id < $2)
-            ORDER BY id DESC LIMIT $3`,
-          [ownerKey, beforeId, limit],
+          'SELECT * FROM charges WHERE owner_key = $1 AND created_at >= $2 AND ($3::int IS NULL OR created_by = $3) ORDER BY id',
+          [ownerKey, sinceMs, createdBy],
         )
       ).map(toCharge);
     },
 
-    /** Cobros que cambiaron desde `sinceMs`, para actualizar el panel en vivo. */
-    async listChangedCharges(ownerKey, ids) {
-      if (ids.length === 0) return [];
-      return (await db.query('SELECT * FROM charges WHERE owner_key = $1 AND id = ANY($2)', [ownerKey, ids])).map(toCharge);
+    /**
+     * Los cobros más recientes, para el panel. `createdBy` limita a los de una
+     * persona; `beforeId` pagina hacia atrás.
+     */
+    async listCharges(ownerKey, { limit = 50, beforeId = null, createdBy = null } = {}) {
+      return (
+        await db.query(
+          `SELECT * FROM charges
+            WHERE owner_key = $1 AND status NOT IN ('awaiting_confirmation', 'cancelled')
+              AND ($2::int IS NULL OR id < $2) AND ($4::int IS NULL OR created_by = $4)
+            ORDER BY id DESC LIMIT $3`,
+          [ownerKey, beforeId, limit, createdBy],
+        )
+      ).map(toCharge);
     },
 
     async countSentByOwner(ownerKey, sinceMs) {
@@ -246,27 +268,40 @@ export function createStore(db, { now = Date.now } = {}) {
       return row.n;
     },
 
-    // ------------------------------------------------------- comerciantes
+    // ------------------------------------------------------------ negocios
 
-    async createMerchant({ email = null, passwordHash = null, businessName, whatsappPhone = null, isDemo = false, isTrusted = false }) {
+    async createMerchant({ businessName, isDemo = false, isTrusted = false }) {
       const row = await db.one(
-        `INSERT INTO merchants (email, password_hash, business_name, whatsapp_phone, is_demo, is_trusted, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [email?.toLowerCase() ?? null, passwordHash, businessName, whatsappPhone, isDemo, isTrusted, now()],
+        'INSERT INTO merchants (business_name, is_demo, is_trusted, created_at) VALUES ($1, $2, $3, $4) RETURNING *',
+        [businessName, isDemo, isTrusted, now()],
       );
       return toMerchant(row);
     },
 
+    /** Crea un negocio con su primer administrador, en una sola transacción. */
+    async createMerchantWithAdmin({ businessName, isDemo = false, isTrusted = false, name, email = null, passwordHash = null, whatsappPhone = null }) {
+      return db.transaction(async (tx) => {
+        const merchant = toMerchant(
+          await tx.one('INSERT INTO merchants (business_name, is_demo, is_trusted, created_at) VALUES ($1, $2, $3, $4) RETURNING *', [
+            businessName,
+            isDemo,
+            isTrusted,
+            now(),
+          ]),
+        );
+        const user = toUser(
+          await tx.one(
+            `INSERT INTO users (merchant_id, role, name, email, password_hash, whatsapp_phone, created_at)
+             VALUES ($1, 'admin', $2, $3, $4, $5, $6) RETURNING *`,
+            [merchant.id, name, email?.toLowerCase() ?? null, passwordHash, whatsappPhone, now()],
+          ),
+        );
+        return { merchant, user };
+      });
+    },
+
     async getMerchant(id) {
       return toMerchant(await db.one('SELECT * FROM merchants WHERE id = $1', [id]));
-    },
-
-    async getMerchantByEmail(email) {
-      return toMerchant(await db.one('SELECT * FROM merchants WHERE email = $1', [String(email).toLowerCase()]));
-    },
-
-    async getMerchantByWhatsapp(phone) {
-      return toMerchant(await db.one('SELECT * FROM merchants WHERE whatsapp_phone = $1', [phone]));
     },
 
     async getMerchantByBankAccountId(bankAccountId) {
@@ -276,27 +311,6 @@ export function createStore(db, { now = Date.now } = {}) {
     async updateMerchant(id, fields) {
       const { sql, values } = assignments(MERCHANT_COLUMNS, fields, 2);
       return toMerchant(await db.one(`UPDATE merchants SET ${sql} WHERE id = $1 RETURNING *`, [id, ...values]));
-    },
-
-    /**
-     * Liga un número de WhatsApp al comerciante dueño del código, si el código
-     * sigue vigente. El número se quita de cualquier otro comerciante.
-     */
-    async linkWhatsapp(code, phone) {
-      return db.transaction(async (tx) => {
-        const merchant = await tx.one('SELECT * FROM merchants WHERE link_code = $1 AND link_code_expires_at > $2 FOR UPDATE', [
-          code,
-          now(),
-        ]);
-        if (!merchant) return null;
-        await tx.query('UPDATE merchants SET whatsapp_phone = NULL WHERE whatsapp_phone = $1 AND id <> $2', [phone, merchant.id]);
-        return toMerchant(
-          await tx.one(
-            'UPDATE merchants SET whatsapp_phone = $2, link_code = NULL, link_code_expires_at = NULL WHERE id = $1 RETURNING *',
-            [merchant.id, phone],
-          ),
-        );
-      });
     },
 
     /** Cuentas bancarias en validación que no se han revisado desde `beforeMs`. */
@@ -312,24 +326,144 @@ export function createStore(db, { now = Date.now } = {}) {
       ).map(toMerchant);
     },
 
+    // ------------------------------------------------------------ personas
+
+    async createUser({ merchantId, role, name, email = null, passwordHash = null, whatsappPhone = null, inviteTokenHash = null, inviteExpiresAt = null }) {
+      return toUser(
+        await db.one(
+          `INSERT INTO users (merchant_id, role, name, email, password_hash, whatsapp_phone, invite_token_hash, invite_expires_at, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+          [merchantId, role, name, email?.toLowerCase() ?? null, passwordHash, whatsappPhone, inviteTokenHash, inviteExpiresAt, now()],
+        ),
+      );
+    },
+
+    async getUser(id) {
+      return toUser(await db.one('SELECT * FROM users WHERE id = $1', [id]));
+    },
+
+    async getUserByEmail(email) {
+      return toUser(await db.one('SELECT * FROM users WHERE email = $1', [String(email).toLowerCase()]));
+    },
+
+    /** La persona activa ligada a ese WhatsApp. */
+    async getUserByWhatsapp(phone) {
+      return toUser(await db.one('SELECT * FROM users WHERE whatsapp_phone = $1 AND active', [phone]));
+    },
+
+    /** La invitación vigente y sin usar con ese token. */
+    async getUserByInvite(tokenHash) {
+      return toUser(
+        await db.one('SELECT * FROM users WHERE invite_token_hash = $1 AND invite_expires_at > $2 AND password_hash IS NULL AND active', [
+          tokenHash,
+          now(),
+        ]),
+      );
+    },
+
+    /** El equipo del negocio: administradores primero, luego por nombre. */
+    async listUsers(merchantId) {
+      return (
+        await db.query(`SELECT * FROM users WHERE merchant_id = $1 ORDER BY active DESC, role = 'admin' DESC, name, id`, [merchantId])
+      ).map(toUser);
+    },
+
+    async countActiveAdmins(merchantId) {
+      return Number((await db.one(`SELECT COUNT(*) AS n FROM users WHERE merchant_id = $1 AND role = 'admin' AND active`, [merchantId])).n);
+    },
+
+    /**
+     * Cambia el rol de alguien del equipo o lo desactiva, sin dejar nunca al
+     * negocio sin un administrador activo. Bloquea el negocio mientras decide,
+     * así dos administradores no pueden quitarse el rol uno al otro a la vez.
+     * @returns {{ ok: true, user } | { ok: false, reason: 'not_found' | 'last_admin' }}
+     */
+    async changeMember(merchantId, userId, { role = null, deactivate = false }) {
+      return db.transaction(async (tx) => {
+        await tx.one('SELECT id FROM merchants WHERE id = $1 FOR UPDATE', [merchantId]);
+        const member = toUser(await tx.one('SELECT * FROM users WHERE id = $1 AND merchant_id = $2', [userId, merchantId]));
+        if (!member) return { ok: false, reason: 'not_found' };
+        const losesAdmin = member.active && member.role === 'admin' && (deactivate || (role && role !== 'admin'));
+        if (losesAdmin) {
+          const { n } = await tx.one(`SELECT COUNT(*) AS n FROM users WHERE merchant_id = $1 AND role = 'admin' AND active`, [merchantId]);
+          if (Number(n) <= 1) return { ok: false, reason: 'last_admin' };
+        }
+        if (deactivate) {
+          await tx.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+          const user = await tx.one(
+            `UPDATE users SET active = FALSE, whatsapp_phone = NULL, link_code = NULL, link_code_expires_at = NULL,
+                    invite_token_hash = NULL, invite_expires_at = NULL
+              WHERE id = $1 RETURNING *`,
+            [userId],
+          );
+          return { ok: true, user: toUser(user) };
+        }
+        const user = await tx.one('UPDATE users SET role = $2 WHERE id = $1 RETURNING *', [userId, role ?? member.role]);
+        return { ok: true, user: toUser(user) };
+      });
+    },
+
+    async updateUser(id, fields) {
+      const { sql, values } = assignments(USER_COLUMNS, fields, 2);
+      return toUser(await db.one(`UPDATE users SET ${sql} WHERE id = $1 RETURNING *`, [id, ...values]));
+    },
+
+    /** Desactiva a una persona: no puede entrar, cobrar ni usar su WhatsApp. Sus cobros se conservan. */
+    async deactivateUser(id) {
+      return db.transaction(async (tx) => {
+        await tx.query('DELETE FROM sessions WHERE user_id = $1', [id]);
+        return toUser(
+          await tx.one(
+            `UPDATE users SET active = FALSE, whatsapp_phone = NULL, link_code = NULL, link_code_expires_at = NULL,
+                    invite_token_hash = NULL, invite_expires_at = NULL
+              WHERE id = $1 RETURNING *`,
+            [id],
+          ),
+        );
+      });
+    },
+
+    /**
+     * Liga un número de WhatsApp a la persona dueña del código, si sigue
+     * vigente. El número se quita de cualquier otra persona.
+     */
+    async linkWhatsapp(code, phone) {
+      return db.transaction(async (tx) => {
+        const user = await tx.one('SELECT * FROM users WHERE link_code = $1 AND link_code_expires_at > $2 AND active FOR UPDATE', [
+          code,
+          now(),
+        ]);
+        if (!user) return null;
+        await tx.query('UPDATE users SET whatsapp_phone = NULL WHERE whatsapp_phone = $1 AND id <> $2', [phone, user.id]);
+        return toUser(
+          await tx.one('UPDATE users SET whatsapp_phone = $2, link_code = NULL, link_code_expires_at = NULL WHERE id = $1 RETURNING *', [
+            user.id,
+            phone,
+          ]),
+        );
+      });
+    },
+
     // ------------------------------------------------------------ sesiones
 
-    async createSession({ tokenHash, merchantId, csrfToken, expiresAt }) {
-      await db.query('INSERT INTO sessions (token_hash, merchant_id, csrf_token, created_at, expires_at) VALUES ($1, $2, $3, $4, $5)', [
+    async createSession({ tokenHash, userId, csrfToken, expiresAt }) {
+      await db.query('INSERT INTO sessions (token_hash, user_id, csrf_token, created_at, expires_at) VALUES ($1, $2, $3, $4, $5)', [
         tokenHash,
-        merchantId,
+        userId,
         csrfToken,
         now(),
         expiresAt,
       ]);
     },
 
-    /** La sesión vigente con su comerciante, o null. */
+    /** La sesión vigente con su persona (si sigue activa) y su negocio, o null. */
     async getSession(tokenHash) {
       const row = await db.one('SELECT * FROM sessions WHERE token_hash = $1 AND expires_at > $2', [tokenHash, now()]);
       if (!row) return null;
-      const merchant = await store.getMerchant(row.merchant_id);
-      return merchant ? { csrfToken: row.csrf_token, expiresAt: row.expires_at, merchant } : null;
+      const user = await store.getUser(row.user_id);
+      if (!user?.active) return null;
+      const merchant = await store.getMerchant(user.merchantId);
+      return merchant ? { csrfToken: row.csrf_token, expiresAt: row.expires_at, user, merchant } : null;
     },
 
     async deleteSession(tokenHash) {

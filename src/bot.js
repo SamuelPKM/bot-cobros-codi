@@ -1,9 +1,10 @@
 // Canal de chat: WhatsApp y la demo web pública. Traduce cada mensaje a una
 // operación del núcleo de cobros (charges.js) y responde con texto.
 //
-// Un número de WhatsApp cobra a nombre del comerciante al que está ligado.
-// Para ligarlo, el comerciante genera un código en la web (Ajustes) y manda
-// "vincular <código>" desde su WhatsApp: así se comprueba que el número es suyo.
+// Un número de WhatsApp cobra a nombre de la persona (administrador o vendedor)
+// a la que está ligado, dentro de su negocio. Para ligarlo, la persona genera
+// un código en la web (Ajustes) y manda "vincular <código>" desde su WhatsApp:
+// así se comprueba que el número es suyo.
 
 import { normalizePhone, parseAmountCommand, parseCommand } from './command.js';
 import { texts } from './messages.js';
@@ -43,8 +44,9 @@ export function createBot({ store, charges, outbox, demo = null, webUrl = null, 
       });
     }
     const phone = normalizePhone(from);
-    const merchant = phone ? await store.getMerchantByWhatsapp(phone) : null;
-    return merchant ? charges.contextFor(merchant, { channel: 'whatsapp', notifyTo: from }) : null;
+    const user = phone ? await store.getUserByWhatsapp(phone) : null;
+    const merchant = user ? await store.getMerchant(user.merchantId) : null;
+    return merchant ? charges.contextFor(merchant, { channel: 'whatsapp', user, notifyTo: from }) : null;
   }
 
   async function handleMessage({ from, text }) {
@@ -54,8 +56,8 @@ export function createBot({ store, charges, outbox, demo = null, webUrl = null, 
     const link = /^vincular (\d{6})$/.exec(simple);
     const phone = normalizePhone(from);
     if (link && phone) {
-      const merchant = await store.linkWhatsapp(link[1], phone);
-      return reply(from, merchant ? texts.linked(merchant) : texts.linkCodeInvalid());
+      const user = await store.linkWhatsapp(link[1], phone);
+      return reply(from, user ? texts.linked(user, await store.getMerchant(user.merchantId)) : texts.linkCodeInvalid());
     }
 
     const ctx = await contextFor(from);

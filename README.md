@@ -19,8 +19,10 @@ Requiere Node.js 22.5 o más nuevo. No hay sandbox de pey: se prueba en producci
 - **Web** (`/`): página de inicio, registro e inicio de sesión de comerciantes, y un panel con:
   - los cobros de hoy, y el formulario para crear uno nuevo de cualquiera de las tres formas;
   - estados que se actualizan solos, el detalle de cada cobro (con el QR o la liga) y exportación a CSV;
-  - ajustes: nombre del negocio, ligar WhatsApp y registrar la CLABE.
-- **Bot de WhatsApp**: los mismos cobros desde el chat, más `sí`/`no` para confirmar, `liga` para un push que expiró, `resumen` y `ayuda`. Un número se liga a una cuenta mandando `vincular <código>`, con el código que da la web.
+  - ajustes: tu nombre y tu WhatsApp; nombre del negocio y CLABE (administradores);
+  - equipo: invitar vendedores con una liga, cambiar roles y desactivar.
+- **Equipos para pymes**: cada negocio tiene **administradores** y **vendedores**, y todos cobran. El administrador cobra como cualquiera y además ve los cobros y totales de todo el negocio y de cada persona, invita al equipo y registra la CLABE. El vendedor cobra desde la web y su propio WhatsApp y ve solo sus cobros. El aviso de "Pagado" le llega a quien hizo el cobro. Siempre queda al menos un administrador activo.
+- **Bot de WhatsApp**: los mismos cobros desde el chat, más `sí`/`no` para confirmar, `liga` para un push que expiró, `resumen` y `ayuda`. Cada persona liga su número mandando `vincular <código>`, con el código que le da la web; sus cobros quedan a su nombre.
 - **Demo pública** (`/demo`): el chat del bot en una página que cualquiera abre sin invitación, como piden las reglas del hackatón.
 - **Dinero a la cuenta de cada comerciante**: cada uno registra su CLABE. Mientras Banxico la valida (hasta 5 días hábiles), queda en **modo prueba**: cobros de hasta `DEMO_MAX_AMOUNT` que llegan a la cuenta del proyecto.
 
@@ -73,7 +75,7 @@ En Render, con Postgres en Neon: [docs/deploy-render.md](docs/deploy-render.md).
 1. Crea una app en developers.facebook.com, agrégale el producto WhatsApp y usa el número de prueba de Meta.
 2. Pon las variables `WHATSAPP_*` en el servidor.
 3. En WhatsApp > Configuración, registra el webhook `https://<tu-dominio>/webhooks/whatsapp` con tu `WHATSAPP_VERIFY_TOKEN` y suscríbete al campo `messages`.
-4. En la web, entra a **Ajustes > Ligar mi WhatsApp** y manda `vincular <código>` al número del bot.
+4. En la web, entra a **Ajustes > Ligar mi WhatsApp** y manda `vincular <código>` al número del bot. Cada persona del equipo hace lo mismo con su número.
 
 El número de prueba de Meta solo puede escribirle a los números que agregues como destinatarios en la app. Por eso el jurado prueba en la web y en la demo.
 

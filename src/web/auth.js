@@ -67,30 +67,35 @@ function sessionCookie(value, { maxAgeSeconds, secure }) {
  * Middlewares de sesión.
  * @param secure true para mandar la cookie solo por HTTPS (producción).
  */
-export function createAuth({ store, secure = false, now = Date.now }) {
-  /** Abre una sesión para el comerciante y pone la cookie. */
-  async function startSession(res, merchant) {
+/**
+ * @param forbiddenPage función (req) => HTML para quien no tiene permiso.
+ */
+export function createAuth({ store, secure = false, now = Date.now, forbiddenPage = () => 'Solo un administrador puede hacer esto.' }) {
+  /** Abre una sesión para la persona y pone la cookie. */
+  async function startSession(res, user) {
     const token = newToken();
     await store.createSession({
       tokenHash: hashToken(token),
-      merchantId: merchant.id,
+      userId: user.id,
       csrfToken: newToken(),
       expiresAt: now() + SESSION_DAYS * 24 * 60 * 60 * 1000,
     });
     res.append('Set-Cookie', sessionCookie(token, { maxAgeSeconds: SESSION_DAYS * 24 * 60 * 60, secure }));
   }
 
-  async function endSession(req, res) {
+  /** Cierra la sesión del navegador. Con clearCookie false solo la borra de la base (porque enseguida se abre otra). */
+  async function endSession(req, res, { clearCookie = true } = {}) {
     const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
     if (token) await store.deleteSession(hashToken(token));
-    res.append('Set-Cookie', sessionCookie('', { maxAgeSeconds: 0, secure }));
+    if (clearCookie) res.append('Set-Cookie', sessionCookie('', { maxAgeSeconds: 0, secure }));
   }
 
-  /** Carga la sesión (si hay) en req.merchant y req.csrfToken. */
+  /** Carga la sesión (si hay) en req.user (la persona), req.merchant (su negocio) y req.csrfToken. */
   async function loadSession(req, _res, next) {
     try {
       const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
       const session = token ? await store.getSession(hashToken(token)) : null;
+      req.user = session?.user ?? null;
       req.merchant = session?.merchant ?? null;
       req.csrfToken = session?.csrfToken ?? null;
       next();
@@ -100,12 +105,19 @@ export function createAuth({ store, secure = false, now = Date.now }) {
   }
 
   /** Solo deja pasar con sesión; si no, manda a iniciar sesión. */
-  function requireMerchant(req, res, next) {
-    if (req.merchant) return next();
+  function requireUser(req, res, next) {
+    if (req.user && req.merchant) return next();
     if (req.path.includes('/api/') || req.accepts(['html', 'json']) === 'json') {
       return res.status(401).json({ error: 'Inicia sesión.' });
     }
     return res.redirect(`/entrar?siguiente=${encodeURIComponent(req.originalUrl)}`);
+  }
+
+  /** Solo administradores del negocio. */
+  function requireAdmin(req, res, next) {
+    if (req.user?.role === 'admin') return next();
+    if (req.path.includes('/api/')) return res.status(403).json({ error: 'Solo un administrador puede hacer esto.' });
+    return res.status(403).type('html').send(forbiddenPage(req));
   }
 
   /** Rechaza POST de otro sitio: por Origin y, con sesión, por el token CSRF del formulario. */
@@ -120,7 +132,7 @@ export function createAuth({ store, secure = false, now = Date.now }) {
       }
       if (host !== req.get('host')) return res.status(403).send('Origen no permitido.');
     }
-    if (req.merchant) {
+    if (req.user) {
       const sent = String(req.body?._csrf ?? req.get('x-csrf-token') ?? '');
       const expected = String(req.csrfToken ?? '');
       const ok = sent.length === expected.length && sent.length > 0 && timingSafeEqual(Buffer.from(sent), Buffer.from(expected));
@@ -129,5 +141,5 @@ export function createAuth({ store, secure = false, now = Date.now }) {
     return next();
   }
 
-  return { startSession, endSession, loadSession, requireMerchant, checkForm };
+  return { startSession, endSession, loadSession, requireUser, requireAdmin, checkForm };
 }

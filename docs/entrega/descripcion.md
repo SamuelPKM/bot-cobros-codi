@@ -18,7 +18,9 @@ El asistente le muestra el cobro, pide un "sí" y manda la solicitud de pago CoD
 
 Sin el teléfono del cliente, escribe `qr 150 corte` y recibe un QR para el mostrador, o `liga 150 corte` y recibe una liga de pago para mandarla por donde quiera. Si un cobro al celular expira, el asistente ofrece la liga como plan B. Con `resumen` ve lo que cobró en el día y lo que sigue pendiente.
 
-Lo mismo puede hacerlo desde la web: un panel con los cobros del día que se actualizan solos, el QR o la liga de cada cobro, y exportación a CSV. En Ajustes liga su WhatsApp y registra su CLABE, para que los pagos le lleguen directo a su cuenta.
+También cobra desde la web: un panel que se actualiza solo, con el QR o la liga de cada cobro y exportación a CSV. Ahí registra su CLABE para que los pagos le lleguen directo.
+
+Está pensado para pymes donde el dueño también vende: el administrador cobra y además ve lo de todo el negocio y los totales de cada persona. Sus vendedores cobran desde su propio WhatsApp y ven solo sus cobros.
 
 ## Cómo usa el API de pey
 
@@ -27,9 +29,9 @@ Lo mismo puede hacerlo desde la web: un panel con los cobros del día que se act
 - **Ligas de pago** (`POST /payment-link/create`) como alternativa sin teléfono, con CoDi o tarjeta.
 - **Cuentas bancarias** (`POST /bank-account`) para que cada comerciante reciba en su propia CLABE: sus push y QR se crean con su `bankAccountId`.
 - **Webhooks firmados** (`codi.pn.payment_received`, `codi.qr.payment_received`, `payment_link.status_updated`, `bank.account.updated`), verificados con Standard Webhooks, para avisar del pago en el momento.
-- **Consulta de transacciones** (`GET /transaction/{id}`, `GET /transaction/codi/qr/{id}`) para confirmar cada pago antes de avisar, y no dar por expirado un cobro que sí se pagó.
+- **Consulta de transacciones** (`GET /transaction/{id}`, `GET /transaction/codi/qr/{id}`) para confirmar cada pago antes de avisar.
 
-Cada cobro lleva su identificador en `metadata`, así un pago se liga a su cobro aunque se pierda una respuesta de red. Como el API no tiene llave de idempotencia, el asistente nunca reintenta un cobro por su cuenta: prefiere avisar al comerciante antes que mandarle dos cobros a su cliente.
+Cada cobro lleva su identificador en `metadata`, así un pago se liga a su cobro aunque se pierda una respuesta. Como el API no tiene llave de idempotencia, el asistente nunca reintenta un cobro solo: prefiere avisar antes que cobrar dos veces.
 
 ## Por qué importa
 

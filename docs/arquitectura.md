@@ -21,7 +21,23 @@ Cóbrale tiene tres canales (web, WhatsApp y la demo pública) sobre un mismo n�
 | Integraciones | `src/pey.js`, `src/whatsapp.js`, `src/outbox.js` | APIs externas y a dónde va cada aviso |
 | Datos | `src/db/` | Conexión, migraciones y todas las consultas (`store.js`). Ningún otro archivo escribe SQL |
 
-Un cobro creado desde WhatsApp aparece en la web del mismo comerciante, y al revés: los dos canales comparten su `owner_key`.
+Un cobro creado desde WhatsApp aparece en la web del mismo negocio, y al revés: los dos canales comparten su `owner_key`.
+
+## Negocios, personas y roles
+
+Un negocio (`merchants`) tiene su nombre, su CLABE y su modo prueba. Las personas (`users`) son quienes entran y cobran, cada una con su correo, contraseña y WhatsApp, y uno de dos roles:
+
+| | Vendedor | Administrador |
+| --- | --- | --- |
+| Cobrar desde la web y desde su WhatsApp | Sí | Sí |
+| Ver y confirmar sus cobros | Sí | Sí |
+| Ver los cobros y totales de todo el negocio y de cada persona | No | Sí |
+| Invitar, cambiar de rol y desactivar personas | No | Sí |
+| Cambiar el nombre del negocio y registrar la CLABE | No | Sí |
+
+Cada cobro guarda quién lo creó (`charges.created_by`). El núcleo recibe el contexto de la persona y decide con `canAccess`: el administrador ve los del negocio y el vendedor solo los suyos. Un "sí" por WhatsApp confirma solo el último borrador de quien lo escribe, y el aviso de "Pagado" va al chat de quien hizo el cobro.
+
+El administrador invita con una liga de un solo uso que vence en 7 días; en la base solo se guarda su hash, y la persona invitada elige su contraseña. No hace falta un servicio de correo: la liga se comparte por WhatsApp. Cambiar un rol o desactivar a alguien bloquea la fila del negocio (`SELECT … FOR UPDATE`) mientras cuenta administradores, así dos administradores no pueden quitarse el rol a la vez y el negocio nunca se queda sin uno. Desactivar cierra sus sesiones y le quita el WhatsApp, pero conserva sus cobros. El modo prueba se cuenta por negocio.
 
 ## Qué la hace escalable
 
@@ -47,7 +63,7 @@ Un cobro creado desde WhatsApp aparece en la web del mismo comerciante, y al rev
 
 ## Dinero a la cuenta de cada comerciante
 
-Cada comerciante registra su CLABE desde la web (`POST /bank-account` de pey). La CLABE se valida antes con el dígito verificador de Banxico.
+Un administrador registra la CLABE del negocio desde la web (`POST /bank-account` de pey). La CLABE se valida antes con el dígito verificador de Banxico.
 
 Mientras Banxico la activa, el comerciante está en **modo prueba**: cobros de hasta `DEMO_MAX_AMOUNT`, que llegan a la cuenta ligada a la API key. Cuando la cuenta queda `ACTIVE`, sus push y QR se crean con su `bankAccountId` y el dinero le llega directo. pey no acepta `bankAccountId` en las ligas de pago: esas siempre liquidan a la cuenta de la API key.
 

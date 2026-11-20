@@ -39,10 +39,14 @@ const bot = createBot({ store, charges, outbox, demo: config.demo, webUrl: confi
 // Cuenta de demostración para el jurado (siempre en modo prueba).
 if (config.web.demoAccount) {
   const { email, password } = config.web.demoAccount;
-  const existing = await store.getMerchantByEmail(email);
+  const existing = await store.getUserByEmail(email);
   const passwordHash = await hashPassword(password);
-  if (existing) await store.updateMerchant(existing.id, { passwordHash, isDemo: true });
-  else await store.createMerchant({ email, passwordHash, businessName: config.web.demoMerchantName, isDemo: true });
+  if (existing) {
+    await store.updateUser(existing.id, { passwordHash, active: true, role: 'admin' });
+    await store.updateMerchant(existing.merchantId, { isDemo: true });
+  } else {
+    await store.createMerchantWithAdmin({ businessName: config.web.demoMerchantName, isDemo: true, name: 'Jurado', email, passwordHash });
+  }
 }
 
 const app = createApp({
