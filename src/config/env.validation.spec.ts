@@ -21,7 +21,19 @@ describe('validateEnv', () => {
       ADMIN_USERNAME: undefined,
       ADMIN_PASSWORD: undefined,
       BUSINESS_NAME: 'Cóbrale',
+      EXPO_ACCESS_TOKEN: undefined,
+      SWEEPER_ENABLED: true,
     });
+  });
+
+  it('permite apagar el barrido (pruebas) y configurar el token de Expo', () => {
+    const env = validateEnv({
+      ...base,
+      SWEEPER_ENABLED: 'false',
+      EXPO_ACCESS_TOKEN: 'expo-token',
+    });
+    expect(env.SWEEPER_ENABLED).toBe(false);
+    expect(env.EXPO_ACCESS_TOKEN).toBe('expo-token');
   });
 
   it('usa BUSINESS_NAME, el nombre que ve quien paga en su banco', () => {

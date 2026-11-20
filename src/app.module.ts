@@ -6,6 +6,8 @@ import { typeOrmOptions } from './database/data-source';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChargesModule } from './modules/charges/charges.module';
 import { HealthModule } from './modules/health/health.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SweeperModule } from './modules/sweeper/sweeper.module';
 import { UsersModule } from './modules/users/users.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 
@@ -28,6 +30,8 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     UsersModule,
     ChargesModule,
     WebhooksModule,
+    NotificationsModule,
+    SweeperModule,
     HealthModule,
   ],
 })

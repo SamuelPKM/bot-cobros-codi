@@ -24,6 +24,10 @@ export interface Env {
   ADMIN_PASSWORD: string | undefined;
   /** Nombre del negocio al inicio del concepto que ve quien paga (el banco solo muestra al titular). */
   BUSINESS_NAME: string;
+  /** Opcional: token de acceso de Expo si activas "Enhanced Security for Push Notifications". */
+  EXPO_ACCESS_TOKEN: string | undefined;
+  /** Barrido periódico de cobros (true por defecto; las pruebas lo apagan). */
+  SWEEPER_ENABLED: boolean;
 }
 
 const text = (value: unknown): string | undefined =>
@@ -91,5 +95,7 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     ADMIN_USERNAME: adminUsername,
     ADMIN_PASSWORD: adminPassword,
     BUSINESS_NAME: businessName,
+    EXPO_ACCESS_TOKEN: text(raw.EXPO_ACCESS_TOKEN),
+    SWEEPER_ENABLED: text(raw.SWEEPER_ENABLED) !== 'false',
   };
 }

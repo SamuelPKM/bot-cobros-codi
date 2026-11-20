@@ -6,13 +6,17 @@ import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
 import { typeOrmOptions } from '../../src/database/data-source';
 import { configureApp } from '../../src/main';
+import { ExpoPushClient } from '../../src/modules/notifications/services/expo-push-client.service';
 import { PeyClient } from '../../src/modules/pey/services/pey-client.service';
+import { FakeExpoPushClient } from '../fakes/fake-expo-push-client';
 import { FakePeyClient } from '../fakes/fake-pey-client';
 
 export interface TestApp {
   app: INestApplication;
   /** pey simulado: ninguna prueba e2e llama a la API real. */
   pey: FakePeyClient;
+  /** Expo Push simulado. */
+  expo: FakeExpoPushClient;
 }
 
 /**
@@ -32,16 +36,19 @@ export async function createTestApp(): Promise<TestApp> {
   await migrator.destroy();
 
   const pey = new FakePeyClient();
+  const expo = new FakeExpoPushClient();
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
     .overrideProvider(PeyClient)
     .useValue(pey)
+    .overrideProvider(ExpoPushClient)
+    .useValue(expo)
     .compile();
   const app = moduleRef.createNestApplication({ rawBody: true });
   configureApp(app);
   await app.init();
-  return { app, pey };
+  return { app, pey, expo };
 }
 
 /** Olvida los intentos contados por el límite de login (cada prueba empieza de cero). */

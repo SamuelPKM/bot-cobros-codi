@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { pesosToCents } from '../../../shared/money/money';
+import { paymentFromTransaction } from '../../charges/mappers/pey-payment.mapper';
 import { ChargePaymentsService } from '../../charges/services/charge-payments.service';
+import { PaymentNotifier } from '../../notifications/services/payment-notifier.service';
 import { PeyClient } from '../../pey/services/pey-client.service';
 import {
   CODI_PAYMENT_EVENTS,
@@ -31,6 +32,7 @@ export class PeyWebhookService {
     private readonly events: Repository<WebhookEvent>,
     private readonly pey: PeyClient,
     private readonly payments: ChargePaymentsService,
+    private readonly notifier: PaymentNotifier,
   ) {}
 
   async handle({ id, event }: VerifiedWebhook): Promise<WebhookResult> {
@@ -73,22 +75,32 @@ export class PeyWebhookService {
       );
     }
 
-    const chargeId = Number(
-      tx.metadata?.externalMetadata?.chargeId ??
-        event.metadata?.externalMetadata?.chargeId,
-    );
-    const datePaid = tx.datePaid ?? event.datePaid;
-
-    const { result } = await this.payments.recordPayment({
-      kind,
-      transactionId: event.transactionId,
-      qrId: kind === 'qr' ? event.codiQrId : undefined,
-      chargeId: Number.isInteger(chargeId) ? chargeId : undefined,
-      paidCents: pesosToCents(tx.amountBreakdown?.base ?? tx.amount),
-      paidAt: datePaid ? new Date(datePaid * 1000) : new Date(),
-      trackingKey:
-        tx.metadata?.trackingKey ?? event.metadata?.trackingKey ?? null,
+    const payment = paymentFromTransaction(tx, kind, {
+      qrId: event.codiQrId,
+      fallback: {
+        chargeId: event.metadata?.externalMetadata?.chargeId,
+        datePaid: event.datePaid,
+        trackingKey: event.metadata?.trackingKey,
+      },
     });
+    const { result, chargeId: paidChargeId } =
+      await this.payments.recordPayment({
+        ...payment,
+        transactionId: event.transactionId,
+      });
+    if (result === 'paid' && paidChargeId !== null)
+      await this.notify(paidChargeId);
     return result;
+  }
+
+  /** El pago ya quedó registrado: si el aviso falla no se le pide a pey que reintente; lo reintenta el barrido. */
+  private async notify(chargeId: number): Promise<void> {
+    try {
+      await this.notifier.notifyPaid(chargeId);
+    } catch (error) {
+      this.logger.warn(
+        `cobro ${chargeId}: el aviso de pago falló, lo reintentará el barrido: ${(error as Error).message}`,
+      );
+    }
   }
 }

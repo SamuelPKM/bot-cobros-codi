@@ -12,5 +12,11 @@ export const MAX_PUSHES_PER_PAYER_PER_HOUR = 3;
 /** numRef de CoDi: hasta 7 dígitos. */
 export const NUM_REF_MODULUS = 10_000_000;
 
+/** Un cobro sin ningún intento vigente vence a los 30 minutos de creado. */
+export const CHARGE_TTL_MINUTES = 30;
+
+/** Margen antes de vencer un intento, por si el webhook de pago viene en camino. */
+export const EXPIRATION_GRACE_SECONDS = 20;
+
 export const DEFAULT_LIST_LIMIT = 50;
 export const MAX_LIST_LIMIT = 100;

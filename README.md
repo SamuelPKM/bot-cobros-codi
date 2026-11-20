@@ -52,7 +52,7 @@ src/
    │  └─ types/            # Role
    ├─ charges/             # cobros: una venta (Charge) con sus intentos de pago (push o QR)
    │  ├─ controllers/      # POST /charges, POST /charges/:id/qr, GET /charges, GET /charges/:id
-   │  ├─ services/         # ChargesService (cobrar) y ChargePaymentsService (registrar pagos)
+   │  ├─ services/         # ChargesService (cobrar), ChargePaymentsService (registrar pagos), ChargeLifecycleService (vencer y avisos)
    │  ├─ entities/         # Charge, PaymentAttempt
    │  ├─ policies/         # reglas puras: concepto para quien paga, motivo de error de pey
    │  ├─ dto/  mappers/  interfaces/  types/  constants/
@@ -61,6 +61,13 @@ src/
    │  ├─ services/         # verificador Standard Webhooks e idempotencia por webhook-id
    │  ├─ entities/         # WebhookEvent
    │  └─ constants/  interfaces/
+   ├─ notifications/       # Expo Push: "Pago recibido" al vendedor y a los admins activos
+   │  ├─ controllers/      # POST/DELETE /push-tokens (registrar o quitar el dispositivo)
+   │  ├─ services/         # ExpoPushClient, PushTokensService, PaymentNotifier
+   │  ├─ policies/         # texto de la notificación
+   │  └─ entities/  dto/  interfaces/  constants/
+   ├─ sweeper/             # barrido cada 30 s con advisory lock de Postgres
+   │  └─ services/         # concilia intentos vencidos con pey, vence cobros, reintenta avisos
    ├─ pey/                 # adaptador de la API de pey (CoDi)
    │  ├─ services/         # PeyClient: push, QR, consulta de transacciones
    │  ├─ interfaces/       # contratos de la API de pey
