@@ -1,0 +1,50 @@
+# Blueprint de Render para Cóbrale API: https://render.com/docs/blueprint-spec
+# Guía paso a paso: docs/deploy.md
+#
+# La base de datos vive en Neon (DATABASE_URL), no en Render.
+# Los secretos no van aquí: Render los pide al aplicar el Blueprint (sync: false).
+
+services:
+  - type: web
+    name: cobrale-api
+    runtime: node
+    # free: se duerme tras 15 min sin tráfico (el primer request tarda ~1 min y el
+    # barrido no corre dormido). Para la evaluación del hackatón conviene starter.
+    plan: free
+    # Ohio, igual que Neon en AWS us-east-2: menos latencia entre API y base.
+    region: ohio
+    branch: main
+    buildCommand: npm ci && npm run build
+    # Corre las migraciones pendientes y arranca (preDeployCommand no existe en free).
+    startCommand: npm run start:render
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+
+      # --- Secretos: Render los pide al aplicar el Blueprint ---
+      - key: DATABASE_URL
+        sync: false
+      - key: PEY_API_KEY
+        sync: false
+      # Se obtiene al registrar el webhook en portal.mipey.mx, después del primer
+      # despliegue. Mientras falte, /webhooks/pey responde 503 y pey reintenta.
+      - key: PEY_WEBHOOK_SECRET
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Origen de la demo de Expo web (p. ej. https://cobrale-demo.netlify.app)
+      - key: CORS_ORIGINS
+        sync: false
+      - key: BUSINESS_NAME
+        sync: false
+
+      # --- Generados y fijos ---
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: DATABASE_SSL
+        value: 'true'
+      - key: TRUST_PROXY
+        value: 'true'

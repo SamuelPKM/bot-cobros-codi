@@ -22,7 +22,9 @@
     "migration:generate": "npm run typeorm -- migration:generate",
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
-    "db:up": "docker compose up -d --wait"
+    "db:up": "docker compose up -d --wait",
+    "migration:run:prod": "typeorm migration:run -d dist/database/data-source.js",
+    "start:render": "npm run migration:run:prod && node dist/main"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -84,5 +86,8 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

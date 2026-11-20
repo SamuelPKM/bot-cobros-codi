@@ -9,3 +9,6 @@ process.env.ADMIN_USERNAME ??= 'admin-inicial';
 process.env.ADMIN_PASSWORD ??= 'admin-inicial-123';
 // Las pruebas corren el barrido a mano (sweeper.sweep()), no con el intervalo.
 process.env.SWEEPER_ENABLED = 'false';
+// Como en Render: detrás de un proxy, y la demo de Expo web en localhost:8081.
+process.env.TRUST_PROXY = 'true';
+process.env.CORS_ORIGINS = 'http://localhost:8081';

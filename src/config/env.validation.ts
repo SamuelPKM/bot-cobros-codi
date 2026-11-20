@@ -28,7 +28,14 @@ export interface Env {
   EXPO_ACCESS_TOKEN: string | undefined;
   /** Barrido periódico de cobros (true por defecto; las pruebas lo apagan). */
   SWEEPER_ENABLED: boolean;
+  /** true detrás de un proxy (Render): toma la IP real de X-Forwarded-For para los límites. */
+  TRUST_PROXY: boolean;
+  /** Orígenes que pueden llamar la API desde un navegador (la demo de Expo web). */
+  CORS_ORIGINS: string[];
 }
+
+/** Un origen: esquema y host (con puerto opcional), sin ruta ni comodines. */
+const ORIGIN = /^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/i;
 
 const text = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
@@ -74,6 +81,16 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   if (businessName.length > 30)
     errors.push('BUSINESS_NAME debe tener máximo 30 caracteres');
 
+  const corsOrigins = (text(raw.CORS_ORIGINS) ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const badOrigins = corsOrigins.filter((origin) => !ORIGIN.test(origin));
+  if (badOrigins.length > 0)
+    errors.push(
+      `CORS_ORIGINS solo acepta orígenes como https://mi-demo.app (sin ruta ni *): ${badOrigins.join(', ')}`,
+    );
+
   if (errors.length > 0) {
     throw new Error(
       `Configuración inválida (revisa tu .env):\n- ${errors.join('\n- ')}`,
@@ -97,5 +114,7 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     BUSINESS_NAME: businessName,
     EXPO_ACCESS_TOKEN: text(raw.EXPO_ACCESS_TOKEN),
     SWEEPER_ENABLED: text(raw.SWEEPER_ENABLED) !== 'false',
+    TRUST_PROXY: text(raw.TRUST_PROXY) === 'true',
+    CORS_ORIGINS: corsOrigins,
   };
 }

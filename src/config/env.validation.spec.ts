@@ -23,7 +23,35 @@ describe('validateEnv', () => {
       BUSINESS_NAME: 'Cóbrale',
       EXPO_ACCESS_TOKEN: undefined,
       SWEEPER_ENABLED: true,
+      TRUST_PROXY: false,
+      CORS_ORIGINS: [],
     });
+  });
+
+  it('lee TRUST_PROXY y la lista de orígenes permitidos para CORS', () => {
+    const env = validateEnv({
+      ...base,
+      TRUST_PROXY: 'true',
+      CORS_ORIGINS: 'https://cobrale-demo.netlify.app, http://localhost:8081',
+    });
+    expect(env.TRUST_PROXY).toBe(true);
+    expect(env.CORS_ORIGINS).toEqual([
+      'https://cobrale-demo.netlify.app',
+      'http://localhost:8081',
+    ]);
+  });
+
+  it('rechaza orígenes CORS que no son URLs http(s) sin ruta, y el comodín', () => {
+    for (const value of [
+      '*',
+      'cobrale.app',
+      'https://cobrale.app/login',
+      'ftp://x.com',
+    ]) {
+      expect(() => validateEnv({ ...base, CORS_ORIGINS: value })).toThrow(
+        'CORS_ORIGINS',
+      );
+    }
   });
 
   it('permite apagar el barrido (pruebas) y configurar el token de Expo', () => {

@@ -13,6 +13,10 @@ npm run migration:run
 npm run start:dev
 ```
 
+## Deploy
+
+Render (API) + Neon (Postgres), con el blueprint `render.yaml`. Paso a paso y primer cobro real de $0.01: [docs/deploy.md](docs/deploy.md).
+
 ## Pruebas (TDD)
 
 ```bash
