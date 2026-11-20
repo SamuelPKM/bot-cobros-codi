@@ -22,6 +22,8 @@ export interface Env {
   /** Admin que se crea al arrancar si no hay ninguno. */
   ADMIN_USERNAME: string | undefined;
   ADMIN_PASSWORD: string | undefined;
+  /** Nombre del negocio al inicio del concepto que ve quien paga (el banco solo muestra al titular). */
+  BUSINESS_NAME: string;
 }
 
 const text = (value: unknown): string | undefined =>
@@ -64,6 +66,10 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   if (adminPassword && adminPassword.length < 8)
     errors.push('ADMIN_PASSWORD debe tener al menos 8 caracteres');
 
+  const businessName = text(raw.BUSINESS_NAME) ?? 'Cóbrale';
+  if (businessName.length > 30)
+    errors.push('BUSINESS_NAME debe tener máximo 30 caracteres');
+
   if (errors.length > 0) {
     throw new Error(
       `Configuración inválida (revisa tu .env):\n- ${errors.join('\n- ')}`,
@@ -84,5 +90,6 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     JWT_TTL: jwtTtl as Duration,
     ADMIN_USERNAME: adminUsername,
     ADMIN_PASSWORD: adminPassword,
+    BUSINESS_NAME: businessName,
   };
 }

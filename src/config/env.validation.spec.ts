@@ -20,7 +20,20 @@ describe('validateEnv', () => {
       JWT_TTL: '12h',
       ADMIN_USERNAME: undefined,
       ADMIN_PASSWORD: undefined,
+      BUSINESS_NAME: 'Cóbrale',
     });
+  });
+
+  it('usa BUSINESS_NAME, el nombre que ve quien paga en su banco', () => {
+    expect(
+      validateEnv({ ...base, BUSINESS_NAME: 'Tacos Ana' }).BUSINESS_NAME,
+    ).toBe('Tacos Ana');
+  });
+
+  it('exige un BUSINESS_NAME de máximo 30 caracteres', () => {
+    expect(() =>
+      validateEnv({ ...base, BUSINESS_NAME: 'x'.repeat(31) }),
+    ).toThrow('BUSINESS_NAME');
   });
 
   it('acepta el admin inicial cuando vienen usuario y contraseña juntos', () => {

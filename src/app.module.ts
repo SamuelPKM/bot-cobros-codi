@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Env, validateEnv } from './config/env.validation';
 import { typeOrmOptions } from './database/data-source';
 import { AuthModule } from './modules/auth/auth.module';
+import { ChargesModule } from './modules/charges/charges.module';
 import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -24,6 +25,7 @@ import { UsersModule } from './modules/users/users.module';
     }),
     AuthModule,
     UsersModule,
+    ChargesModule,
     HealthModule,
   ],
 })

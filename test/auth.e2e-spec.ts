@@ -14,7 +14,7 @@ describe('Seguridad: autenticación y roles (e2e)', () => {
   let http: ReturnType<typeof request>;
 
   beforeAll(async () => {
-    app = await createTestApp();
+    ({ app } = await createTestApp());
     users = app.get(UsersService);
     http = request(app.getHttpServer());
   });
