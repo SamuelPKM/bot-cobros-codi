@@ -132,7 +132,8 @@ input[type="text"], input[type="email"], input[type="password"], input:not([type
 .filter { margin: 0; }
 .filter label { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 select { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 14px; }
-.actions-cell { white-space: nowrap; }
+.table td.actions-cell { white-space: normal; min-width: 180px; }
+.actions-cell form { white-space: nowrap; }
 .actions-cell .sep { color: var(--muted); margin: 0 6px; }
 .actions-cell .link-button { color: var(--accent); }
 .row-2 { grid-template-columns: 1fr 1fr; }
