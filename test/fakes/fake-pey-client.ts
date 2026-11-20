@@ -73,6 +73,38 @@ export class FakePeyClient {
     return Promise.resolve(this.qrPayments.get(qrId) ?? []);
   }
 
+  /** Simula que el cliente aprobó el push en su banco. */
+  pay(
+    transactionId: string,
+    { trackingKey = 'RASTREO1', datePaid = 1790724758 } = {},
+  ): void {
+    const tx = this.transactions.get(transactionId);
+    if (!tx) throw new Error(`No existe la transacción ${transactionId}`);
+    tx.status = 'PAID';
+    tx.datePaid = datePaid;
+    tx.amountBreakdown = { base: tx.amount };
+    tx.metadata = { ...tx.metadata, trackingKey };
+  }
+
+  /** Simula que el cliente escaneó y pagó el QR. Devuelve el transactionId del pago. */
+  payQr(qrId: string, { trackingKey = 'RASTREOQR' } = {}): string {
+    const index = Number(qrId.replace('IDC', '')) - 1;
+    const qr = this.qrs[index];
+    const payments = this.qrPayments.get(qrId);
+    if (!qr || !payments) throw new Error(`No existe el QR ${qrId}`);
+    const tx: PeyTransaction = {
+      id: `TXQ-${qrId}-${payments.length + 1}`,
+      status: 'PAID',
+      amount: qr.amount,
+      amountBreakdown: { base: qr.amount },
+      datePaid: 1790725000,
+      metadata: { trackingKey, externalMetadata: { ...qr.metadata } },
+    };
+    payments.push(tx);
+    this.transactions.set(tx.id, tx);
+    return tx.id;
+  }
+
   private throwIfFailing(): void {
     if (!this.nextError) return;
     const error = this.nextError;

@@ -52,10 +52,15 @@ src/
    │  └─ types/            # Role
    ├─ charges/             # cobros: una venta (Charge) con sus intentos de pago (push o QR)
    │  ├─ controllers/      # POST /charges, POST /charges/:id/qr, GET /charges, GET /charges/:id
-   │  ├─ services/         # ChargesService: único dueño de cobros e intentos
+   │  ├─ services/         # ChargesService (cobrar) y ChargePaymentsService (registrar pagos)
    │  ├─ entities/         # Charge, PaymentAttempt
    │  ├─ policies/         # reglas puras: concepto para quien paga, motivo de error de pey
    │  ├─ dto/  mappers/  interfaces/  types/  constants/
+   ├─ webhooks/            # POST /webhooks/pey (pública, autenticada por firma)
+   │  ├─ controllers/      # responde 200, 401 (firma), 503 (sin secreto) o 500 (pey reintenta)
+   │  ├─ services/         # verificador Standard Webhooks e idempotencia por webhook-id
+   │  ├─ entities/         # WebhookEvent
+   │  └─ constants/  interfaces/
    ├─ pey/                 # adaptador de la API de pey (CoDi)
    │  ├─ services/         # PeyClient: push, QR, consulta de transacciones
    │  ├─ interfaces/       # contratos de la API de pey
@@ -72,6 +77,7 @@ src/
 - **Cerrado por defecto:** toda ruta exige `Authorization: Bearer <jwt>` salvo las marcadas con `@Public()`.
 - **`shared/` es solo para lo que no pertenece a ningún dominio.** Si algo lo usa un solo módulo, va dentro de ese módulo.
 - **Dinero en centavos enteros** en la base; la API habla en pesos.
+- **El webhook es el aviso; la API de pey es la fuente de verdad:** antes de marcar pagado se consulta la transacción y se compara el monto. La firma se verifica sobre el cuerpo crudo.
 - **Un POST a pey nunca se reintenta solo:** la API no tiene llave de idempotencia y reintentar un push puede cobrar dos veces. Un timeout o un error de red se tratan como "no se sabe".
 - **El esquema solo cambia con migraciones** (`synchronize: false`).
 - **Las pruebas unitarias van junto al archivo que prueban**; las e2e van en `test/`.

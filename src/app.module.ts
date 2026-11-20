@@ -7,6 +7,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ChargesModule } from './modules/charges/charges.module';
 import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { UsersModule } from './modules/users/users.module';
     AuthModule,
     UsersModule,
     ChargesModule,
+    WebhooksModule,
     HealthModule,
   ],
 })
