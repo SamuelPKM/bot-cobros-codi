@@ -47,6 +47,13 @@ La API **no tiene credenciales de pey propias**. Cada negocio registra la suya:
 
 La liga regresa al cliente a `FRONTEND_URL/pago/gracias` o `/pago/cancelado` (pantallas del frontend; pey exige https). Vence en 24 h; el webhook `payment_link.status_updated` y el barrido la confirman con pey. Solo cuenta la base: la propina no.
 
+### Reportes
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /reports/today` | Corte de hoy (hora de la Ciudad de México): pagados, pendientes y vencidos. El admin ve su negocio con el desglose por persona; el vendedor, solo lo suyo |
+| `GET /reports/charges.csv?from=AAAA-MM-DD&to=AAAA-MM-DD` | Cobros en CSV (UTF-8 con BOM para Excel), hasta 93 días, con protección contra fórmulas. Por defecto, hoy |
+
 ### Equipo e invitaciones
 
 | Ruta | Quién | Qué hace |
