@@ -1,4 +1,5 @@
 import {
+  IsIn,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -6,16 +7,30 @@ import {
   Matches,
   Max,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import { MAX_AMOUNT } from '../../pey/constants/pey.constants';
+import { CHARGE_METHODS, type ChargeMethod } from '../types/charge.types';
 
 export class CreateChargeDto {
-  /** Celular del cliente: exactamente 10 dígitos, sin +52 ni espacios. */
-  @IsString()
+  /**
+   * push (por defecto): cobro al celular del cliente.
+   * qr: código que el cliente escanea. link: liga que se le reenvía.
+   */
+  @IsOptional()
+  @IsIn(CHARGE_METHODS, { message: 'El método debe ser push, qr o link' })
+  method?: ChargeMethod;
+
+  /** Celular del cliente: exactamente 10 dígitos. Obligatorio solo para push. */
+  @ValidateIf(
+    (dto: CreateChargeDto) =>
+      (dto.method ?? 'push') === 'push' || dto.phone !== undefined,
+  )
+  @IsString({ message: 'Escribe el celular del cliente' })
   @Matches(/^\d{10}$/, {
     message: 'El celular debe tener exactamente 10 dígitos',
   })
-  phone!: string;
+  phone?: string;
 
   /** En pesos. */
   @IsNumber(

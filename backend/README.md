@@ -37,6 +37,16 @@ La API **no tiene credenciales de pey propias**. Cada negocio registra la suya:
 | `PATCH /businesses/me` | admin | Cambia el nombre, la API key (validada otra vez) o registra el secreto `whsec_` del webhook |
 | `POST /webhooks/pey/:slug` | pey (firma) | Webhook de ESE negocio, verificado con SU secreto |
 
+### Cobros
+
+| Ruta | Qué hace |
+|---|---|
+| `POST /charges` | `{ method?, phone?, amount, concept? }`. `push` (por defecto, pide `phone`) manda el cobro al celular; `qr` devuelve el QR; `link` devuelve la liga de pago (CoDi o tarjeta) |
+| `POST /charges/:id/qr` · `POST /charges/:id/link` | Plan B del mismo cobro; si ya hay uno vigente devuelve el mismo |
+| `GET /charges` · `GET /charges/:id` | Lista y detalle (el vendedor ve los suyos, el admin los del negocio) |
+
+La liga regresa al cliente a `FRONTEND_URL/pago/gracias` o `/pago/cancelado` (pantallas del frontend; pey exige https). Vence en 24 h; el webhook `payment_link.status_updated` y el barrido la confirman con pey. Solo cuenta la base: la propina no.
+
 ### Equipo e invitaciones
 
 | Ruta | Quién | Qué hace |

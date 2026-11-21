@@ -59,6 +59,14 @@ export class PaymentAttempt {
   @Column({ name: 'qr_string', type: 'text', nullable: true })
   qrString!: string | null;
 
+  /** Liga: id de la liga en pey. */
+  @Column({ name: 'link_id', type: 'text', nullable: true, unique: true })
+  linkId!: string | null;
+
+  /** Liga: URL que se reenvía al cliente. */
+  @Column({ name: 'link_url', type: 'text', nullable: true })
+  linkUrl!: string | null;
+
   @Column({ name: 'tracking_key', type: 'text', nullable: true })
   trackingKey!: string | null;
 

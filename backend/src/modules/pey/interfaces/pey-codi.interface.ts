@@ -59,3 +59,41 @@ export interface PeyTransaction {
     externalMetadata?: PeyMetadata;
   };
 }
+
+/** POST /payment-link/create: liga hospedada por pey (CoDi o tarjeta). */
+export interface CreatePaymentLinkInput {
+  amount: number;
+  /** Pantallas de regreso del frontend; pey exige HTTPS. */
+  successUrl: string;
+  backUrl: string;
+  clientReferenceId?: string;
+  metadata?: PeyMetadata;
+}
+
+export interface CreatePaymentLinkResult {
+  id: string;
+  url: string;
+}
+
+export type PeyPaymentLinkStatus =
+  'pending' | 'processing' | 'paid' | 'partial';
+
+/** Un pago recibido por una liga. */
+export interface PeyLinkTransaction {
+  transactionId: string;
+  paymentMethod?: 'CODI' | 'CARD';
+  /** Unix, segundos. */
+  datePaid?: number;
+  amount: number;
+  amountBreakdown?: { base?: number; tip?: number; fee?: number };
+  metadata?: { trackingKey?: string };
+}
+
+/** GET /payment-link/{id}. */
+export interface PeyPaymentLink {
+  id: string;
+  status: PeyPaymentLinkStatus;
+  amount: number;
+  clientReferenceId?: string;
+  transactions: PeyLinkTransaction[];
+}

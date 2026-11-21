@@ -2,11 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BusinessesService } from '../../businesses/services/businesses.service';
-import { paymentFromTransaction } from '../../charges/mappers/pey-payment.mapper';
+import {
+  paymentFromLink,
+  paymentFromTransaction,
+} from '../../charges/mappers/pey-payment.mapper';
 import { ChargePaymentsService } from '../../charges/services/charge-payments.service';
 import { PaymentNotifier } from '../../notifications/services/payment-notifier.service';
 import {
   CODI_PAYMENT_EVENTS,
+  PAYMENT_LINK_EVENT,
   PEY_SOURCE,
 } from '../constants/webhooks.constants';
 import { WebhookEvent } from '../entities/webhook-event.entity';
@@ -56,15 +60,39 @@ export class PeyWebhookService {
     }
 
     const kind = event.type ? CODI_PAYMENT_EVENTS[event.type] : undefined;
-    const result = kind
-      ? await this.processPayment(businessId, event, kind)
-      : 'ignored';
+    let result: WebhookResult = 'ignored';
+    if (kind) result = await this.processPayment(businessId, event, kind);
+    else if (event.type === PAYMENT_LINK_EVENT)
+      result = await this.processLink(businessId, event);
 
     await this.events.update(
       { source, id },
       { processedAt: new Date(), result },
     );
     this.logger.log(`${source} ${id} ${event.type ?? 'sin tipo'} -> ${result}`);
+    return result;
+  }
+
+  /**
+   * Liga pagada. Solo interesa el estado `paid`; se confirma con la API de pey
+   * (fuente de verdad) y si aún no la ve pagada se lanza para que pey reintente.
+   */
+  private async processLink(
+    businessId: number,
+    event: PeyWebhookEvent,
+  ): Promise<WebhookResult> {
+    if (event.status !== 'paid') return 'ignored';
+    if (!event.paymentLinkId) return 'missing_transaction_id';
+
+    const pey = await this.businesses.peyFor(businessId);
+    const link = await pey.getPaymentLink(event.paymentLinkId);
+    if (link.status !== 'paid') {
+      throw new Error(`la liga ${link.id} está en ${link.status}, no en paid`);
+    }
+    const { result, chargeId } = await this.payments.recordPayment(
+      paymentFromLink(link, { businessId }),
+    );
+    if (result === 'paid' && chargeId !== null) await this.notify(chargeId);
     return result;
   }
 

@@ -14,6 +14,8 @@ export interface PublicAttempt {
   error: string | null;
   /** Solo en QR: contenido para dibujarlo tal cual. */
   qrString: string | null;
+  /** Solo en liga: URL que se reenvía al cliente. */
+  linkUrl: string | null;
 }
 
 /** Un cobro como lo ve la app. Montos en pesos. */
@@ -22,7 +24,8 @@ export interface PublicCharge {
   status: ChargeStatus;
   amount: number;
   concept: string | null;
-  payerPhone: string;
+  /** null en cobros por QR o liga sin teléfono. */
+  payerPhone: string | null;
   seller: { id: number; name: string };
   paidVia: AttemptKind | null;
   paidAt: string | null;
@@ -33,4 +36,8 @@ export interface PublicCharge {
 export interface PublicQr {
   qrString: string;
   expiresAt: string;
+}
+
+export interface PublicLink {
+  url: string;
 }

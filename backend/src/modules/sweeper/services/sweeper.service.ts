@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import type { DueAttempt } from '../../charges/interfaces/charge-expiry.interface';
-import { paymentFromTransaction } from '../../charges/mappers/pey-payment.mapper';
+import type { RecordPaymentInput } from '../../charges/interfaces/record-payment.interface';
+import {
+  paymentFromLink,
+  paymentFromTransaction,
+} from '../../charges/mappers/pey-payment.mapper';
 import { ChargeLifecycleService } from '../../charges/services/charge-lifecycle.service';
 import { ChargePaymentsService } from '../../charges/services/charge-payments.service';
 import { BusinessesService } from '../../businesses/services/businesses.service';
@@ -58,14 +62,9 @@ export class SweeperService {
   /** Un error con pey deja el intento como estaba; el siguiente barrido lo reintenta. */
   private async reconcile(attempt: DueAttempt): Promise<void> {
     try {
-      const tx = await this.findPayment(attempt);
-      if (tx) {
-        const { result } = await this.payments.recordPayment(
-          paymentFromTransaction(tx, attempt.kind, {
-            businessId: attempt.businessId,
-            qrId: attempt.qrId,
-          }),
-        );
+      const payment = await this.findPayment(attempt);
+      if (payment) {
+        const { result } = await this.payments.recordPayment(payment);
         this.logger.log(
           `intento ${attempt.attemptId}: pago encontrado al vencer -> ${result}`,
         );
@@ -80,25 +79,40 @@ export class SweeperService {
   }
 
   /**
-   * Pago de un intento según pey (con la API key de su negocio), o null. Un
-   * push en duda sin transactionId no se puede consultar: se vence, y si luego
-   * llega el webhook se liga por chargeId.
+   * El pago de un intento según pey (con la API key de su negocio), o null.
+   * Un push en duda sin transactionId no se puede consultar: se vence, y si
+   * luego llega el webhook se liga por chargeId.
    */
   private async findPayment(
     attempt: DueAttempt,
-  ): Promise<PeyTransaction | null> {
-    if (!(attempt.kind === 'qr' && attempt.qrId) && !attempt.transactionId) {
-      return null;
+  ): Promise<RecordPaymentInput | null> {
+    const { businessId } = attempt;
+    const canCheck =
+      (attempt.kind === 'qr' && attempt.qrId) ||
+      (attempt.kind === 'link' && attempt.linkId) ||
+      attempt.transactionId;
+    if (!canCheck) return null;
+
+    const pey = await this.businesses.peyFor(businessId);
+    if (attempt.kind === 'link' && attempt.linkId) {
+      const link = await pey.getPaymentLink(attempt.linkId);
+      return link.status === 'paid'
+        ? paymentFromLink(link, { businessId })
+        : null;
     }
-    const pey = await this.businesses.peyFor(attempt.businessId);
+    let tx: PeyTransaction | null = null;
     if (attempt.kind === 'qr' && attempt.qrId) {
       const payments = await pey.listQrTransactions(attempt.qrId);
-      return payments.find((tx) => tx.status === 'PAID') ?? null;
+      tx = payments.find((p) => p.status === 'PAID') ?? null;
+    } else if (attempt.transactionId) {
+      const found = await pey.getTransaction(attempt.transactionId);
+      tx = found.status === 'PAID' ? found : null;
     }
-    if (attempt.transactionId) {
-      const tx = await pey.getTransaction(attempt.transactionId);
-      return tx.status === 'PAID' ? tx : null;
-    }
-    return null;
+    return tx
+      ? paymentFromTransaction(tx, attempt.kind, {
+          businessId,
+          qrId: attempt.qrId,
+        })
+      : null;
   }
 }

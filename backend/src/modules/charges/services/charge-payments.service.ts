@@ -98,6 +98,14 @@ export class ChargePaymentsService {
       if (byQr) return byQr;
     }
 
+    if (input.linkId) {
+      const byLink = await manager.findOne(PaymentAttempt, {
+        where: { linkId: input.linkId, ...ofBusiness },
+        relations: { charge: true },
+      });
+      if (byLink) return byLink;
+    }
+
     if (input.chargeId === undefined) return null;
     const charge = await manager.findOneBy(Charge, {
       id: input.chargeId,

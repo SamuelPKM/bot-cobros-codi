@@ -4,6 +4,9 @@ export interface PeyWebhookEvent {
   transactionId?: string;
   /** Solo en codi.qr.payment_received: IDC de Banxico. */
   codiQrId?: string;
+  /** Solo en payment_link.status_updated. */
+  paymentLinkId?: string;
+  status?: string;
   amount?: number;
   /** Unix, segundos. */
   datePaid?: number;

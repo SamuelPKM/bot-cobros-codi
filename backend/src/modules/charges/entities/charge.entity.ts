@@ -34,9 +34,9 @@ export class Charge {
   @JoinColumn({ name: 'seller_id' })
   seller?: User;
 
-  /** Celular del cliente, 10 dígitos. */
-  @Column({ name: 'payer_phone', type: 'char', length: 10 })
-  payerPhone!: string;
+  /** Celular del cliente, 10 dígitos. null en cobros por QR o liga sin teléfono. */
+  @Column({ name: 'payer_phone', type: 'char', length: 10, nullable: true })
+  payerPhone!: string | null;
 
   @Column({ name: 'amount_cents', type: 'integer' })
   amountCents!: number;

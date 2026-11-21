@@ -8,6 +8,8 @@ export interface RecordPaymentInput {
   transactionId: string;
   /** Solo QR: IDC de Banxico. */
   qrId?: string;
+  /** Solo liga: id de la liga en pey. */
+  linkId?: string;
   /** Respaldo: `metadata.chargeId` que mandamos a pey al crear el cobro. */
   chargeId?: number;
   /** Lo que pagó el cliente (sin propina ni comisión), en centavos. */

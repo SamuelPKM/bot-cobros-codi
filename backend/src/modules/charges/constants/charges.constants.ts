@@ -6,6 +6,13 @@ export const PUSH_EXPIRATION_SECONDS = MIN_EXPIRATION_SECONDS;
 /** Vigencia del QR de respaldo: 15 minutos para que el cliente lo escanee con calma. */
 export const QR_EXPIRATION_SECONDS = 15 * 60;
 
+/** Vigencia de la liga de pago: un día para que el cliente la abra cuando pueda. */
+export const LINK_EXPIRATION_HOURS = 24;
+
+/** Pantallas del frontend a las que pey regresa al cliente después de la liga. */
+export const LINK_SUCCESS_PATH = '/pago/gracias';
+export const LINK_BACK_PATH = '/pago/cancelado';
+
 /** Máximo de push al mismo celular por hora, sumando a todos los vendedores (anti-spam). */
 export const MAX_PUSHES_PER_PAYER_PER_HOUR = 3;
 

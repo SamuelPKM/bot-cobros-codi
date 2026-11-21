@@ -27,9 +27,10 @@ export class ChargeLifecycleService {
         kind: DueAttempt['kind'];
         transaction_id: string | null;
         qr_id: string | null;
+        link_id: string | null;
       }[]
     >(
-      `SELECT a.id, a.charge_id, c.business_id, a.kind, a.transaction_id, a.qr_id
+      `SELECT a.id, a.charge_id, c.business_id, a.kind, a.transaction_id, a.qr_id, a.link_id
          FROM payment_attempts a JOIN charges c ON c.id = a.charge_id
         WHERE a.status IN ('pending', 'unknown')
           AND a.expires_at <= now() - make_interval(secs => $1)
@@ -43,6 +44,7 @@ export class ChargeLifecycleService {
       kind: r.kind,
       transactionId: r.transaction_id,
       qrId: r.qr_id,
+      linkId: r.link_id,
     }));
   }
 

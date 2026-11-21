@@ -9,6 +9,7 @@ export interface DueAttempt {
   kind: AttemptKind;
   transactionId: string | null;
   qrId: string | null;
+  linkId: string | null;
 }
 
 /** Lo necesario para avisar de un pago. */

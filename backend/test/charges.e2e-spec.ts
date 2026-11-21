@@ -85,6 +85,7 @@ describe('Cobros: push con QR de respaldo (e2e)', () => {
           expiresAt: expect.any(String),
           error: null,
           qrString: null,
+          linkUrl: null,
         },
       ]);
       const expiresIn =

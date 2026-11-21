@@ -13,8 +13,13 @@ export const CHARGE_STATUSES = [
 ] as const;
 export type ChargeStatus = (typeof CHARGE_STATUSES)[number];
 
-export const ATTEMPT_KINDS = ['push', 'qr'] as const;
+/** push al celular, QR que se escanea, o liga de pago que se reenvía. */
+export const ATTEMPT_KINDS = ['push', 'qr', 'link'] as const;
 export type AttemptKind = (typeof ATTEMPT_KINDS)[number];
+
+/** Con qué se cobra al crear el cobro. Solo el push necesita el celular. */
+export const CHARGE_METHODS = ATTEMPT_KINDS;
+export type ChargeMethod = AttemptKind;
 
 /**
  * sending -> pending -> paid | expired

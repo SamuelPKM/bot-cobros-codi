@@ -163,6 +163,58 @@ describe('PeyClient', () => {
     });
   });
 
+  describe('ligas de pago', () => {
+    const link = {
+      amount: 150,
+      successUrl: 'https://cobrale.app/pago/gracias',
+      backUrl: 'https://cobrale.app/pago/cancelado',
+      clientReferenceId: 'cobro-7',
+      metadata: { chargeId: '7' },
+    };
+
+    it('createPaymentLink manda POST /payment-link/create sin propina', async () => {
+      const { fetch, calls } = fakeFetch(200, {
+        id: 'LINK1',
+        url: 'https://app.mipey.mx/payment-link/LINK1',
+      });
+      await expect(client(fetch).createPaymentLink(link)).resolves.toEqual({
+        id: 'LINK1',
+        url: 'https://app.mipey.mx/payment-link/LINK1',
+      });
+      expect(calls[0].url).toBe('https://api.pey.mx/payment-link/create');
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({
+        ...link,
+        hasTip: false,
+      });
+    });
+
+    it.each([
+      [
+        'un regreso que no es https',
+        { ...link, successUrl: 'http://cobrale.app/ok' },
+        'INVALID_PARAMETER',
+      ],
+      ['monto 0', { ...link, amount: 0 }, 'INVALID_AMOUNT'],
+    ])('rechaza %s sin llamar a pey', async (_case, input, type) => {
+      const { fetch, calls } = fakeFetch(200, {});
+      await expect(
+        client(fetch).createPaymentLink(input),
+      ).rejects.toMatchObject({ type });
+      expect(calls).toHaveLength(0);
+    });
+
+    it('getPaymentLink consulta GET /payment-link/{id}', async () => {
+      const { fetch, calls } = fakeFetch(200, {
+        id: 'LINK1',
+        status: 'paid',
+        transactions: [],
+      });
+      const res = await client(fetch).getPaymentLink('LINK1');
+      expect(res.status).toBe('paid');
+      expect(calls[0].url).toBe('https://api.pey.mx/payment-link/LINK1');
+    });
+  });
+
   describe('verifyApiKey', () => {
     it('consulta GET /transaction/api-key para comprobar que la key sirve', async () => {
       const { fetch, calls } = fakeFetch(200, { items: [], nextToken: null });

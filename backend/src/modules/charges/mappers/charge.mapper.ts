@@ -4,6 +4,7 @@ import type { PaymentAttempt } from '../entities/payment-attempt.entity';
 import type {
   PublicAttempt,
   PublicCharge,
+  PublicLink,
   PublicQr,
 } from '../interfaces/public-charge.interface';
 
@@ -18,6 +19,7 @@ export function toPublicAttempt(attempt: PaymentAttempt): PublicAttempt {
     expiresAt: iso(attempt.expiresAt),
     error: attempt.error,
     qrString: attempt.qrString,
+    linkUrl: attempt.linkUrl,
   };
 }
 
@@ -37,6 +39,10 @@ export function toPublicCharge(charge: Charge): PublicCharge {
       .sort((a, b) => a.id - b.id)
       .map(toPublicAttempt),
   };
+}
+
+export function toPublicLink(attempt: PaymentAttempt): PublicLink {
+  return { url: attempt.linkUrl! };
 }
 
 export function toPublicQr(attempt: PaymentAttempt): PublicQr {

@@ -61,6 +61,14 @@ export class FakePeyClientFactory {
         record('listQrTransactions'),
         this.client.listQrTransactions(id)
       ),
+      createPaymentLink: (input) => (
+        record('createPaymentLink'),
+        this.client.createPaymentLink(input)
+      ),
+      getPaymentLink: (id) => (
+        record('getPaymentLink'),
+        this.client.getPaymentLink(id)
+      ),
     };
   }
 }

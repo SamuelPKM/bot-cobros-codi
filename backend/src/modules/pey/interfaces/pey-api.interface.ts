@@ -1,8 +1,11 @@
 import type {
+  CreatePaymentLinkInput,
+  CreatePaymentLinkResult,
   CreatePushInput,
   CreatePushResult,
   CreateQrInput,
   CreateQrResult,
+  PeyPaymentLink,
   PeyTransaction,
 } from './pey-codi.interface';
 
@@ -11,6 +14,10 @@ export interface PeyApi {
   verifyApiKey(): Promise<void>;
   createPush(input: CreatePushInput): Promise<CreatePushResult>;
   createQr(input: CreateQrInput): Promise<CreateQrResult>;
+  createPaymentLink(
+    input: CreatePaymentLinkInput,
+  ): Promise<CreatePaymentLinkResult>;
   getTransaction(transactionId: string): Promise<PeyTransaction>;
   listQrTransactions(qrId: string): Promise<PeyTransaction[]>;
+  getPaymentLink(linkId: string): Promise<PeyPaymentLink>;
 }

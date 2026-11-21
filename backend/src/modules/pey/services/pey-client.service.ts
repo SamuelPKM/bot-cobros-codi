@@ -7,10 +7,13 @@ import { PeyError } from '../errors/pey.error';
 import type { PeyApi } from '../interfaces/pey-api.interface';
 import type { PeyClientOptions } from '../interfaces/pey-client-options.interface';
 import type {
+  CreatePaymentLinkInput,
+  CreatePaymentLinkResult,
   CreatePushInput,
   CreatePushResult,
   CreateQrInput,
   CreateQrResult,
+  PeyPaymentLink,
   PeyTransaction,
 } from '../interfaces/pey-codi.interface';
 
@@ -69,6 +72,30 @@ export class PeyClient implements PeyApi {
       'POST',
       '/codi/qr',
       compact({ ...input, generateImage: false }),
+    );
+  }
+
+  /** POST /payment-link/create: liga de pago (CoDi o tarjeta), sin propina. */
+  async createPaymentLink(
+    input: CreatePaymentLinkInput,
+  ): Promise<CreatePaymentLinkResult> {
+    assertAmount(input.amount);
+    for (const url of [input.successUrl, input.backUrl]) {
+      if (!/^https:\/\//.test(url))
+        throw invalid('Las URLs de regreso de la liga deben ser HTTPS');
+    }
+    return this.request<CreatePaymentLinkResult>(
+      'POST',
+      '/payment-link/create',
+      compact({ ...input, hasTip: false }),
+    );
+  }
+
+  /** GET /payment-link/{id}: estado y pagos de una liga. */
+  getPaymentLink(linkId: string): Promise<PeyPaymentLink> {
+    return this.request<PeyPaymentLink>(
+      'GET',
+      `/payment-link/${encodeURIComponent(linkId)}`,
     );
   }
 
