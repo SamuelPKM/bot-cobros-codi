@@ -15,6 +15,8 @@ process.env.SWEEPER_ENABLED = 'false';
 // Como en Render: detrás de un proxy, y la demo de Expo web en localhost:8081.
 process.env.TRUST_PROXY = 'true';
 process.env.CORS_ORIGINS = 'http://localhost:8081';
+// La web (Next) manda la IP del visitante firmada con este secreto.
+process.env.FRONT_PROXY_SECRET = 'secreto-del-proxy-de-la-web-de-pruebas';
 // WhatsApp configurado (el cliente de Meta se reemplaza por uno simulado).
 process.env.WHATSAPP_TOKEN = 'token-meta-pruebas';
 process.env.WHATSAPP_PHONE_NUMBER_ID = '1234567890';

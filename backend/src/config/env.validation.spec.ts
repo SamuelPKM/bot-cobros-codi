@@ -24,6 +24,7 @@ describe('validateEnv', () => {
       SWEEPER_ENABLED: true,
       TRUST_PROXY: false,
       CORS_ORIGINS: [],
+      FRONT_PROXY_SECRET: undefined,
       WHATSAPP: null,
       DEMO: null,
     });
@@ -202,6 +203,21 @@ describe('validateEnv', () => {
           DEMO_CHARGES_PER_HOUR: '-1',
         }),
       ).toThrow(/DEMO_CHARGES_PER_HOUR/);
+    });
+  });
+
+  describe('FRONT_PROXY_SECRET', () => {
+    it('acepta un secreto largo para confiar en la IP que manda la web', () => {
+      const secret = 's'.repeat(32);
+      expect(
+        validateEnv({ ...base, FRONT_PROXY_SECRET: secret }).FRONT_PROXY_SECRET,
+      ).toBe(secret);
+    });
+
+    it('rechaza un secreto corto', () => {
+      expect(() =>
+        validateEnv({ ...base, FRONT_PROXY_SECRET: 'corto' }),
+      ).toThrow(/FRONT_PROXY_SECRET/);
     });
   });
 });

@@ -2,9 +2,11 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { Env } from './config/env.validation';
+import { forwardedClientIp } from './shared/http/client-ip.policy';
 
 /** Configuración común a producción y a las pruebas e2e. */
 export function configureApp(app: INestApplication): void {
@@ -13,6 +15,20 @@ export function configureApp(app: INestApplication): void {
   // Detrás del proxy de Render: la IP real viene en X-Forwarded-For (un salto).
   if (config.get('TRUST_PROXY', { infer: true })) {
     (app as NestExpressApplication).set('trust proxy', 1);
+  }
+
+  // La web (Next) llama desde su servidor: con el secreto compartido manda la
+  // IP del visitante, para que los límites por IP no sean globales.
+  const frontProxySecret = config.get('FRONT_PROXY_SECRET', { infer: true });
+  if (frontProxySecret) {
+    app.use((req: Request, _res: Response, next: NextFunction) => {
+      const ip = forwardedClientIp(req.headers, frontProxySecret);
+      if (ip) {
+        Object.defineProperty(req, 'ip', { value: ip });
+        Object.defineProperty(req, 'ips', { value: [ip] });
+      }
+      next();
+    });
   }
 
   // Solo los orígenes configurados (la demo de Expo web). La app nativa no usa CORS.

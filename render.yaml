@@ -37,6 +37,9 @@ services:
       # Orígenes de navegador que llaman la API: la web y la demo de Expo web, separados por coma
       - key: CORS_ORIGINS
         sync: false
+      # El mismo valor que FRONT_PROXY_SECRET de la web: con él la API recibe la IP real del visitante
+      - key: FRONT_PROXY_SECRET
+        sync: false
       # WhatsApp Cloud API (Meta): las cuatro o ninguna (déjalas vacías para no usar WhatsApp)
       - key: WHATSAPP_TOKEN
         sync: false

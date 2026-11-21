@@ -37,6 +37,11 @@ export interface Env {
   TRUST_PROXY: boolean;
   /** Orígenes que pueden llamar la API desde un navegador (la demo de Expo web). */
   CORS_ORIGINS: string[];
+  /**
+   * Secreto compartido con la web (Next). Con él, la API confía en la IP del
+   * visitante que la web manda en X-Cobrale-Client-Ip (sus llamadas salen del servidor de Next).
+   */
+  FRONT_PROXY_SECRET: string | undefined;
   /** WhatsApp Cloud API (Meta). null si no está configurado: la API funciona igual sin él. */
   WHATSAPP: WhatsAppConfig | null;
   /** Demo pública: cobra con la API key de un negocio de demostración del equipo. null = apagada. */
@@ -132,6 +137,10 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   if (whatsappPresent.length > 0 && whatsappMissing.length > 0)
     errors.push(`Para activar WhatsApp faltan: ${whatsappMissing.join(', ')}`);
 
+  const frontProxySecret = text(raw.FRONT_PROXY_SECRET);
+  if (frontProxySecret !== undefined && frontProxySecret.length < 32)
+    errors.push('FRONT_PROXY_SECRET debe tener al menos 32 caracteres');
+
   // Demo pública: opcional.
   let demo: DemoConfig | null = null;
   const demoBusiness = text(raw.DEMO_BUSINESS_ID);
@@ -177,6 +186,7 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     SWEEPER_ENABLED: text(raw.SWEEPER_ENABLED) !== 'false',
     TRUST_PROXY: text(raw.TRUST_PROXY) === 'true',
     CORS_ORIGINS: corsOrigins,
+    FRONT_PROXY_SECRET: frontProxySecret,
     WHATSAPP:
       whatsappMissing.length === 0
         ? {
