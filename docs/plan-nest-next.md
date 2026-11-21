@@ -31,7 +31,7 @@ El código de Express (`src/`, `test/`, `scripts/`) se retiró en esta rama y si
 | F0 | Monorepo: `backend/` con el historial de cobrale-api; se retira Express | ✅ |
 | F1 | Backend: liga de pago, invitaciones con liga de un solo uso, cambio de rol (sin dejar el negocio sin admin), resumen del día por persona y CSV | ✅ |
 | F2 | Backend: motor de conversación (cobra, sí/no, qr, liga, resumen, ayuda) ✅, WhatsApp (webhook de Meta, vincular número, QR como imagen, "✅ Pagado") ✅ y demo pública con límites ✅ | ✅ |
-| F3 | `front/web` Next.js: entrar y panel base con sesión en cookie httpOnly ✅; faltan inicio, registro con API key, entrar, panel de cobros, nuevo cobro (push, QR, liga), equipo, ajustes (negocio, API key, webhook, WhatsApp), invitación, demo, páginas de regreso de la liga | ⏳ |
+| F3 | `front/web` Next.js: entrar con sesión en cookie httpOnly, registro con API key, panel (resumen del día y cobros), nuevo cobro (push, QR, liga) y detalle con plan B y "Pagado" en vivo ✅; faltan equipo, ajustes (negocio, API key, webhook, WhatsApp), invitación, demo, páginas de regreso de la liga | ⏳ |
 | F4 | Deploy (Render + Neon + frontend), documentos de entrega al día y pull request | ⏳ |
 
 ## Regla: nada de front en Nest

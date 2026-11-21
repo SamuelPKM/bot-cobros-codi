@@ -1,35 +1,52 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Suspense } from 'react';
-import { logout } from '@/features/auth/actions/logout.action';
 import { getCurrentUser } from '@/features/auth/services/current-user.service';
+import { WebhookReminder } from '@/features/businesses/components/webhook-reminder';
+import { getMyBusiness } from '@/features/businesses/services/business.service';
+import { ChargesTable } from '@/features/charges/components/charges-table';
+import { listCharges } from '@/features/charges/services/charges.service';
+import { TodaySummary } from '@/features/reports/components/today-summary';
+import { getTodaySummary } from '@/features/reports/services/reports.service';
+import { primaryButton } from '@/shared/ui/styles';
 
 export const metadata: Metadata = { title: 'Panel · Cóbrale' };
 
 export default function PanelPage() {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8">
-      <h1 className="text-2xl font-semibold text-zinc-900">Panel</h1>
-      {/* Lee la sesión: va dentro de Suspense para no bloquear el resto de la página. */}
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-zinc-900">Panel</h1>
+        <Link href="/panel/cobros/nuevo" className={primaryButton}>
+          Nuevo cobro
+        </Link>
+      </div>
       <Suspense fallback={<p className="text-zinc-600">Cargando…</p>}>
-        <Greeting />
+        <PanelContent />
       </Suspense>
-    </main>
+    </>
   );
 }
 
-async function Greeting() {
+async function PanelContent() {
   const user = await getCurrentUser();
+  const isAdmin = user.role === 'admin';
+  const [summary, charges, business] = await Promise.all([
+    getTodaySummary(),
+    listCharges(),
+    isAdmin ? getMyBusiness() : Promise.resolve(null),
+  ]);
+
   return (
-    <div className="flex items-center justify-between gap-4">
-      <p className="text-zinc-800">
-        Hola, <span className="font-medium">{user.name}</span>
-        {user.role === 'admin' ? ' (administrador)' : ''}
-      </p>
-      <form action={logout}>
-        <button type="submit" className="text-sm font-medium text-emerald-800 underline">
-          Salir
-        </button>
-      </form>
-    </div>
+    <>
+      {business && <WebhookReminder business={business} />}
+      <TodaySummary summary={summary} />
+      <section aria-labelledby="charges-title" className="flex flex-col gap-3">
+        <h2 id="charges-title" className="text-lg font-semibold text-zinc-900">
+          {isAdmin ? 'Cobros del negocio' : 'Tus cobros'}
+        </h2>
+        <ChargesTable charges={charges} showSeller={isAdmin} />
+      </section>
+    </>
   );
 }
