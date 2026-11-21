@@ -32,6 +32,10 @@ El código de Express (`src/`, `test/`, `scripts/`) se retiró en esta rama y si
 | F3 | `frontend/` Next.js: inicio, registro con API key, entrar, panel de cobros, nuevo cobro (push, QR, liga), equipo, ajustes (negocio, API key, webhook, WhatsApp), invitación, demo, páginas de regreso de la liga | ⏳ |
 | F4 | Deploy (Render + Neon + frontend), documentos de entrega al día y pull request | ⏳ |
 
+## Regla: nada de front en Nest
+
+`backend/` solo expone **API JSON y webhooks** (pey y Meta). Toda pantalla vive en `frontend/` (Next.js): el panel, la demo pública, la aceptación de invitaciones y las páginas de regreso de la liga de pago (`/pago/gracias` y `/pago/cancelado`). Nest no sirve HTML, CSS, assets ni vistas; cuando necesita una URL de pantalla (por ejemplo, el regreso de la liga o el enlace de una invitación), arma la del frontend con `FRONTEND_URL`.
+
 ## Lo que cambia frente a la web anterior
 
 - **Registro:** se pide la **API key de pey** del negocio (validada) en lugar de la CLABE.
