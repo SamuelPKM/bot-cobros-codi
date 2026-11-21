@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { secondaryButton } from '@/shared/ui/styles';
+import { secondaryButton } from './styles';
 
-/** Copia un texto (la liga de pago) para pegarlo en cualquier chat. */
+/** Copia un texto (una liga) para pegarlo en cualquier chat. */
 export function CopyButton({ text, label = 'Copiar liga' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
 

@@ -14,8 +14,14 @@ export default function PanelLayout({ children }: LayoutProps<'/panel'>) {
           <Link href="/panel/cobros/nuevo" className="font-medium text-emerald-800">
             Nuevo cobro
           </Link>
+          {/* Leen la sesión: dentro de Suspense para no detener el resto. */}
+          <Suspense fallback={null}>
+            <AdminLinks />
+          </Suspense>
+          <Link href="/panel/ajustes" className="font-medium text-emerald-800">
+            Ajustes
+          </Link>
           <div className="ml-auto flex items-center gap-4 text-sm">
-            {/* Lee la sesión: dentro de Suspense para no detener el resto. */}
             <Suspense fallback={null}>
               <UserName />
             </Suspense>
@@ -29,6 +35,16 @@ export default function PanelLayout({ children }: LayoutProps<'/panel'>) {
       </header>
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-4 py-8">{children}</main>
     </div>
+  );
+}
+
+async function AdminLinks() {
+  const user = await getCurrentUser();
+  if (user.role !== 'admin') return null;
+  return (
+    <Link href="/panel/equipo" className="font-medium text-emerald-800">
+      Equipo
+    </Link>
   );
 }
 

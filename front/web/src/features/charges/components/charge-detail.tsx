@@ -4,7 +4,7 @@ import { activeLink, activeQr, isWaitingPayment, kindLabel } from '../policies/c
 import { qrDataUrl } from '../services/qr-image.service';
 import { ChargeStatusBadge } from './charge-status-badge';
 import { ChargeStatusPoller } from './charge-status-poller';
-import { CopyButton } from './copy-button';
+import { CopyButton } from '@/shared/ui/copy-button';
 import { FallbackButtons } from './fallback-buttons';
 
 /** Un cobro: estado, QR o liga vigentes, plan B y avisos de cada intento. */

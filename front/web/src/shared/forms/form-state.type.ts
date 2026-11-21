@@ -6,6 +6,8 @@ export interface FormState<Field extends string> {
   fieldErrors?: Partial<Record<Field, string>>;
   formError?: string;
   values?: Partial<Record<Field, string>>;
+  /** Confirmación de que se guardó ("Listo, guardado"). */
+  notice?: string;
 }
 
 export type Parsed<Field extends string, Data> =

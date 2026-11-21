@@ -25,7 +25,7 @@ npm run lint
 npm run build
 ```
 
-Las pruebas van junto al archivo que prueban (`*.test.ts(x)`). Los componentes `async` del servidor no se prueban con Vitest; su lógica vive en servicios que sí se prueban.
+Las pruebas van junto al archivo que prueban (`*.test.ts(x)`); las de varias Server Actions de un tema van en `features/*-actions.test.ts` con los dobles de `test/mocks/server-mocks.ts`. Los componentes `async` del servidor no se prueban con Vitest; su lógica vive en servicios que sí se prueban.
 
 > Vitest 3 + Vite 6 y jsdom 25 a propósito: funcionan con Node 22.9. Las versiones más nuevas piden Node ≥ 22.12.
 
@@ -42,8 +42,8 @@ Como en el backend: primero por **dominio**, luego por **función**. `app/` solo
 ```
 src/
 ├─ app/                    # rutas: page.tsx, layout.tsx (delgadas; usan features/)
-│  ├─ entrar/  registro/
-│  └─ panel/               # layout con la barra; cobros/nuevo y cobros/[id]
+│  ├─ entrar/  registro/  invitacion/[token]/
+│  └─ panel/               # layout con la barra; cobros/nuevo, cobros/[id], equipo, ajustes
 ├─ features/               # un dominio por carpeta
 │  ├─ auth/
 │  │  ├─ actions/          # Server Actions ('use server'): login, logout
@@ -51,7 +51,10 @@ src/
 │  │  ├─ services/         # server-only: cookie de sesión, authedRequest, usuario actual
 │  │  ├─ policies/         # reglas puras: validar el formulario, vencimiento del token
 │  │  └─ constants/  interfaces/  types/
-│  ├─ businesses/          # registro del negocio con su API key, aviso del webhook
+│  ├─ businesses/          # registro del negocio con su API key, ajustes (nombre, API key, webhook)
+│  ├─ team/                # equipo: alta directa y edición (rol, tope, activa, contraseña)
+│  ├─ invitations/         # ligas de un solo uso, revocar y aceptar (página pública)
+│  ├─ whatsapp/            # ligar el número con un código
 │  ├─ charges/             # nuevo cobro, lista, detalle con QR/liga, plan B y "Pagado" en vivo
 │  │  ├─ actions/          # createCharge, showFallback
 │  │  ├─ components/       # NewChargeForm, ChargesTable, ChargeDetail, ChargeStatusPoller…
@@ -64,7 +67,7 @@ src/
    ├─ format/              # pesos, celular y fecha de la Ciudad de México
    ├─ forms/               # FormState de las Server Actions
    ├─ interfaces/          # tipos que devuelve la API (PublicUser)
-   └─ ui/                  # TextField, FormAlert y clases compartidas
+   └─ ui/                  # TextField, SelectField, FormAlert, FormNotice, CopyButton y clases compartidas
 ```
 
 ### Reglas
