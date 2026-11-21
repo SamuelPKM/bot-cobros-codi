@@ -158,7 +158,7 @@ src/
    │  ├─ policies/         # firma de Meta, número 521→10 dígitos, QR a PNG, textos del canal
    │  ├─ whatsapp-messaging.module.ts  # solo mandar (lo usa notifications, sin ciclos)
    │  └─ entities/  interfaces/  errors/  constants/
-   ├─ demo/                # demo pública: sesiones y mensajes con límites (API JSON; la página está en frontend/)
+   ├─ demo/                # demo pública: sesiones y mensajes con límites (API JSON; la página está en front/web)
    │  ├─ controllers/      # GET /demo, POST /demo/sessions, GET/POST /demo/messages
    │  ├─ services/         # DemoService: vendedor por sesión, límites y "✅ Pagado" al consultar
    │  └─ entities/  dto/  mappers/  policies/  interfaces/  types/  constants/

@@ -8,7 +8,7 @@ services:
   - type: web
     name: cobrale-api
     runtime: node
-    # La API vive en backend/ del monorepo (el frontend en frontend/).
+    # La API vive en backend/ del monorepo (las apps de front en front/<app>).
     rootDir: backend
     # free: se duerme tras 15 min sin tráfico (el primer request tarda ~1 min y el
     # barrido no corre dormido). Para la evaluación del hackatón conviene starter.

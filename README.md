@@ -9,7 +9,7 @@ No es un producto oficial de pey ni de Banco de México.
 | Carpeta | Qué es |
 |---|---|
 | [backend/](backend/) | API en NestJS + TypeORM + PostgreSQL. Ver [backend/README.md](backend/README.md) |
-| `frontend/` | Web en Next.js (en construcción) |
+| [front/](front/) | Una carpeta por aplicación de front: [front/web](front/web/) (Next.js) y, más adelante, front/mobile (Expo) |
 | [docs/](docs/) | [Plan de la migración](docs/plan-nest-next.md) y documentos de entrega del hackatón |
 
 ## Arranque rápido (API)

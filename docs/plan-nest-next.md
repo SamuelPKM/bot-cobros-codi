@@ -15,7 +15,9 @@ Rama `feature/nest-next`. Se integra a `main` con un pull request.
 
 ```
 backend/    API NestJS (antes cobrale-api, con su historial)
-frontend/   Web en Next.js (App Router, TypeScript)
+front/      Un proyecto por aplicación, cada uno con su package.json:
+  web/      Web en Next.js 16 (panel, registro, invitaciones, demo pública, regreso de la liga)
+  mobile/   App en Expo (más adelante)
 docs/       Plan y documentos de entrega del hackatón
 render.yaml Blueprint de Render (la API con rootDir: backend)
 ```
@@ -29,12 +31,12 @@ El código de Express (`src/`, `test/`, `scripts/`) se retiró en esta rama y si
 | F0 | Monorepo: `backend/` con el historial de cobrale-api; se retira Express | ✅ |
 | F1 | Backend: liga de pago, invitaciones con liga de un solo uso, cambio de rol (sin dejar el negocio sin admin), resumen del día por persona y CSV | ✅ |
 | F2 | Backend: motor de conversación (cobra, sí/no, qr, liga, resumen, ayuda) ✅, WhatsApp (webhook de Meta, vincular número, QR como imagen, "✅ Pagado") ✅ y demo pública con límites ✅ | ✅ |
-| F3 | `frontend/` Next.js: inicio, registro con API key, entrar, panel de cobros, nuevo cobro (push, QR, liga), equipo, ajustes (negocio, API key, webhook, WhatsApp), invitación, demo, páginas de regreso de la liga | ⏳ |
+| F3 | `front/web` Next.js: entrar y panel base con sesión en cookie httpOnly ✅; faltan inicio, registro con API key, entrar, panel de cobros, nuevo cobro (push, QR, liga), equipo, ajustes (negocio, API key, webhook, WhatsApp), invitación, demo, páginas de regreso de la liga | ⏳ |
 | F4 | Deploy (Render + Neon + frontend), documentos de entrega al día y pull request | ⏳ |
 
 ## Regla: nada de front en Nest
 
-`backend/` solo expone **API JSON y webhooks** (pey y Meta). Toda pantalla vive en `frontend/` (Next.js): el panel, la demo pública, la aceptación de invitaciones y las páginas de regreso de la liga de pago (`/pago/gracias` y `/pago/cancelado`). Nest no sirve HTML, CSS, assets ni vistas; cuando necesita una URL de pantalla (por ejemplo, el regreso de la liga o el enlace de una invitación), arma la del frontend con `FRONTEND_URL`.
+`backend/` solo expone **API JSON y webhooks** (pey y Meta). Toda pantalla vive en `front/web` (Next.js): el panel, la demo pública, la aceptación de invitaciones y las páginas de regreso de la liga de pago (`/pago/gracias` y `/pago/cancelado`). Nest no sirve HTML, CSS, assets ni vistas; cuando necesita una URL de pantalla (por ejemplo, el regreso de la liga o el enlace de una invitación), arma la del frontend con `FRONTEND_URL`.
 
 ## Lo que cambia frente a la web anterior
 
