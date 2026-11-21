@@ -101,6 +101,15 @@ export class BusinessesService {
     return this.getWithSecrets(businessId);
   }
 
+  /** El negocio sin credenciales (nombre, slug…). */
+  async getById(businessId: number): Promise<Business> {
+    const business = await this.dataSource
+      .getRepository(Business)
+      .findOneBy({ id: businessId });
+    if (!business) throw new NotFoundException('No existe ese negocio');
+    return business;
+  }
+
   /** El negocio con sus columnas cifradas (para saber si ya tiene secreto de webhook). */
   async getWithSecrets(businessId: number): Promise<Business> {
     const business = await this.query()

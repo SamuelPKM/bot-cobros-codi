@@ -31,7 +31,10 @@ services:
       # URL pública de este servicio (https://<nombre>.onrender.com), para la URL de webhook de cada negocio
       - key: PUBLIC_BASE_URL
         sync: false
-      # Origen de la demo de Expo web (p. ej. https://cobrale-demo.netlify.app)
+      # URL de la web (Next.js), para las ligas de invitación y el regreso de la liga de pago
+      - key: FRONTEND_URL
+        sync: false
+      # Orígenes de navegador que llaman la API: la web y la demo de Expo web, separados por coma
       - key: CORS_ORIGINS
         sync: false
 

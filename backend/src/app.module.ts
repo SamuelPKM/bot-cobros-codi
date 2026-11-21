@@ -7,6 +7,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { BusinessesModule } from './modules/businesses/businesses.module';
 import { ChargesModule } from './modules/charges/charges.module';
 import { HealthModule } from './modules/health/health.module';
+import { InvitationsModule } from './modules/invitations/invitations.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SweeperModule } from './modules/sweeper/sweeper.module';
 import { UsersModule } from './modules/users/users.module';
@@ -30,6 +31,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     AuthModule,
     UsersModule,
     BusinessesModule,
+    InvitationsModule,
     ChargesModule,
     WebhooksModule,
     NotificationsModule,

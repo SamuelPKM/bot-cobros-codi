@@ -20,6 +20,11 @@ export interface Env {
   ENCRYPTION_KEY: string;
   /** URL pública HTTPS de la API, para mostrar a cada negocio la URL de su webhook. */
   PUBLIC_BASE_URL: string | undefined;
+  /**
+   * Origen de la web (Next.js). Nest no sirve pantallas: con esto arma las
+   * ligas a las del frontend (aceptar invitación, regreso de la liga de pago).
+   */
+  FRONTEND_URL: string | undefined;
   PEY_BASE_URL: string;
   PORT: number;
   /** Vigencia del Bearer token: 15m, 12h, 1d… */
@@ -62,6 +67,18 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   if (publicBaseUrl && !/^https:\/\/[^/]+$/.test(publicBaseUrl))
     errors.push('PUBLIC_BASE_URL debe ser https:// y sin ruta');
 
+  // https, o http solo en localhost para desarrollo.
+  const frontendUrl = text(raw.FRONTEND_URL)?.replace(/\/+$/, '');
+  if (
+    frontendUrl &&
+    !/^(https:\/\/[^/]+|http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?)$/.test(
+      frontendUrl,
+    )
+  )
+    errors.push(
+      'FRONTEND_URL debe ser https:// sin ruta (o http://localhost en desarrollo)',
+    );
+
   const port = Number(text(raw.PORT) ?? 3000);
   if (!Number.isInteger(port) || port <= 0 || port > 65535)
     errors.push('PORT debe ser un número de puerto');
@@ -92,6 +109,7 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     AUTH_SECRET: authSecret!,
     ENCRYPTION_KEY: encryptionKey!,
     PUBLIC_BASE_URL: publicBaseUrl,
+    FRONTEND_URL: frontendUrl,
     PEY_BASE_URL: (text(raw.PEY_BASE_URL) ?? 'https://api.pey.mx').replace(
       /\/+$/,
       '',

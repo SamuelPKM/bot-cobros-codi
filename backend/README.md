@@ -37,6 +37,18 @@ La API **no tiene credenciales de pey propias**. Cada negocio registra la suya:
 | `PATCH /businesses/me` | admin | Cambia el nombre, la API key (validada otra vez) o registra el secreto `whsec_` del webhook |
 | `POST /webhooks/pey/:slug` | pey (firma) | Webhook de ESE negocio, verificado con SU secreto |
 
+### Equipo e invitaciones
+
+| Ruta | Quién | Qué hace |
+|---|---|---|
+| `GET /users` | admin | Todo el equipo (admins y vendedores) |
+| `POST /users` | admin | Alta directa de un vendedor |
+| `PATCH /users/:id` | admin | Nombre, rol, tope, contraseña o desactivar; nunca deja el negocio sin admin activo (409) |
+| `POST /invitations` | admin | Liga de un solo uso (7 días) hacia `FRONTEND_URL/invitacion/<token>`; el token solo se ve aquí |
+| `GET /invitations` · `DELETE /invitations/:id` | admin | Invitaciones vigentes (sin token) y revocar |
+| `GET /invitations/token/:token` | público | A qué negocio y con qué rol invitan (404 si no existe, 410 si ya se usó, venció o se revocó) |
+| `POST /invitations/token/:token/accept` | público (5/min por IP) | Crea la cuenta con el rol de la invitación y abre sesión; sirve una sola vez |
+
 - Los cobros, avisos y el barrido usan la API key **del negocio del cobro**. El dinero llega a la cuenta del titular de esas credenciales (regla 7.3(c) del hackatón) y nadie concentra pagos de terceros (regla 7.1).
 - La API key y el secreto del webhook se guardan **cifrados** (AES-256-GCM con `ENCRYPTION_KEY`) y nunca salen en una respuesta.
 - Todo está separado por negocio: un admin solo ve y administra a su equipo y sus cobros, y un webhook solo puede marcar pagados cobros de su propio negocio.

@@ -16,6 +16,7 @@ describe('validateEnv', () => {
       AUTH_SECRET: base.AUTH_SECRET,
       ENCRYPTION_KEY,
       PUBLIC_BASE_URL: undefined,
+      FRONTEND_URL: undefined,
       PEY_BASE_URL: 'https://api.pey.mx',
       PORT: 3000,
       JWT_TTL: '12h',
@@ -24,6 +25,26 @@ describe('validateEnv', () => {
       TRUST_PROXY: false,
       CORS_ORIGINS: [],
     });
+  });
+
+  it('FRONTEND_URL: el origen de la web (Next.js) para armar ligas a sus pantallas', () => {
+    expect(
+      validateEnv({ ...base, FRONTEND_URL: 'https://cobrale.app/' })
+        .FRONTEND_URL,
+    ).toBe('https://cobrale.app');
+    expect(
+      validateEnv({ ...base, FRONTEND_URL: 'http://localhost:3001' })
+        .FRONTEND_URL,
+    ).toBe('http://localhost:3001');
+    for (const value of [
+      'http://cobrale.app',
+      'https://cobrale.app/panel',
+      'cobrale.app',
+    ]) {
+      expect(() => validateEnv({ ...base, FRONTEND_URL: value })).toThrow(
+        'FRONTEND_URL',
+      );
+    }
   });
 
   it('ya no pide credenciales de pey: cada negocio registra su propia API key', () => {
