@@ -6,6 +6,7 @@ import { typeOrmOptions } from './database/data-source';
 import { AuthModule } from './modules/auth/auth.module';
 import { BusinessesModule } from './modules/businesses/businesses.module';
 import { ChargesModule } from './modules/charges/charges.module';
+import { ConversationsModule } from './modules/conversations/conversations.module';
 import { HealthModule } from './modules/health/health.module';
 import { InvitationsModule } from './modules/invitations/invitations.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -35,6 +36,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     InvitationsModule,
     ChargesModule,
     ReportsModule,
+    ConversationsModule,
     WebhooksModule,
     NotificationsModule,
     SweeperModule,

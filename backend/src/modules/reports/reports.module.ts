@@ -8,5 +8,6 @@ import { ReportsService } from './services/reports.service';
   imports: [UsersModule],
   controllers: [ReportsController],
   providers: [ReportsService],
+  exports: [ReportsService],
 })
 export class ReportsModule {}

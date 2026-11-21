@@ -191,6 +191,23 @@ export class ChargesService {
     return query.getMany();
   }
 
+  /** El último cobro pendiente que hizo esta persona en las últimas `hours` horas. */
+  findLatestPending(user: User, hours: number): Promise<Charge | null> {
+    return this.dataSource
+      .getRepository(Charge)
+      .createQueryBuilder('charge')
+      .where('charge.business_id = :businessId', {
+        businessId: user.businessId,
+      })
+      .andWhere('charge.seller_id = :sellerId', { sellerId: user.id })
+      .andWhere(`charge.status = 'pending'`)
+      .andWhere(`charge.created_at > now() - make_interval(hours => :hours)`, {
+        hours,
+      })
+      .orderBy('charge.id', 'DESC')
+      .getOne();
+  }
+
   /** Un cobro que el usuario puede ver; 404 si es de otro vendedor u otro negocio. */
   async findVisible(user: User, chargeId: number): Promise<Charge> {
     const charge = await this.findWithDetails(chargeId).catch(() => null);
