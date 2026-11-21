@@ -102,10 +102,10 @@ export class UsersService {
   ): Promise<User> {
     const changes = await this.changesFor(input);
     return this.repo.manager.transaction(async (manager) => {
-      const activeAdmins = (await manager.query(
+      const activeAdmins = await manager.query<{ id: number }[]>(
         `SELECT id FROM users WHERE business_id = $1 AND role = 'admin' AND active FOR UPDATE`,
         [businessId],
-      )) as { id: number }[];
+      );
 
       const target = await manager.findOneBy(User, { id, businessId });
       if (!target)
