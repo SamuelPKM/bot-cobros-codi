@@ -84,6 +84,21 @@ Opcional: se activa con las cuatro variables `WHATSAPP_*` (si falta alguna, la A
 - El QR llega como imagen y, cuando el cliente paga, quien cobró recibe "✅ Pagado" con la clave de rastreo (además del push).
 - En Meta: suscribe la app al campo `messages` y registra `https://<api>/webhooks/whatsapp` con el mismo verify token.
 
+### Demo pública
+
+La misma conversación, sin cuenta, para la página `/demo` del frontend. Se enciende con `DEMO_BUSINESS_ID` (un negocio de demostración del propio equipo, con su API key de pey); apagada, todo responde 404.
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /demo` | `{ businessName, maxAmount, chargesPerHour }` |
+| `POST /demo/sessions` | Sesión nueva con la bienvenida → `{ sessionId, messages }` (20 por hora por IP) |
+| `GET /demo/messages?after=<id>` | Mensajes nuevos, incluido "✅ Pagado" cuando el cliente paga (la web consulta cada pocos segundos) |
+| `POST /demo/messages` `{ text, after? }` | Manda un mensaje (1 a 300 caracteres; 30 cada 10 min por sesión y 120 por IP) |
+
+- La sesión viaja en el header `X-Demo-Session` y dura 24 horas. Se guardan solo los hashes del id de sesión y de la IP.
+- Cada sesión tiene su propio vendedor desechable (`demo_visitor`): nadie ve ni confirma lo de otro visitante. No inicia sesión ni aparece en `GET /users`.
+- Los cobros son reales: tope `DEMO_MAX_AMOUNT` por cobro y `DEMO_CHARGES_PER_HOUR` cobros por sesión. El QR llega como `qrString` y lo dibuja la web.
+
 - Los cobros, avisos y el barrido usan la API key **del negocio del cobro**. El dinero llega a la cuenta del titular de esas credenciales (regla 7.3(c) del hackatón) y nadie concentra pagos de terceros (regla 7.1).
 - La API key y el secreto del webhook se guardan **cifrados** (AES-256-GCM con `ENCRYPTION_KEY`) y nunca salen en una respuesta.
 - Todo está separado por negocio: un admin solo ve y administra a su equipo y sus cobros, y un webhook solo puede marcar pagados cobros de su propio negocio.
@@ -143,6 +158,10 @@ src/
    │  ├─ policies/         # firma de Meta, número 521→10 dígitos, QR a PNG, textos del canal
    │  ├─ whatsapp-messaging.module.ts  # solo mandar (lo usa notifications, sin ciclos)
    │  └─ entities/  interfaces/  errors/  constants/
+   ├─ demo/                # demo pública: sesiones y mensajes con límites (API JSON; la página está en frontend/)
+   │  ├─ controllers/      # GET /demo, POST /demo/sessions, GET/POST /demo/messages
+   │  ├─ services/         # DemoService: vendedor por sesión, límites y "✅ Pagado" al consultar
+   │  └─ entities/  dto/  mappers/  policies/  interfaces/  types/  constants/
    ├─ notifications/       # Expo Push: "Pago recibido" a quien cobró y a los admins de su negocio
    │  ├─ controllers/      # POST/DELETE /push-tokens (registrar o quitar el dispositivo)
    │  ├─ services/         # ExpoPushClient, PushTokensService, PaymentNotifier

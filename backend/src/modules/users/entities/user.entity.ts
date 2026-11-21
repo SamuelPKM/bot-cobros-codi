@@ -36,6 +36,10 @@ export class User {
   @Column({ name: 'max_amount_cents', type: 'integer', nullable: true })
   maxAmountCents!: number | null;
 
+  /** Visitante de la demo pública: no inicia sesión ni aparece en el equipo. */
+  @Column({ name: 'demo_visitor', type: 'boolean', default: false })
+  demoVisitor!: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

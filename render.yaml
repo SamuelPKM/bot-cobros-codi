@@ -46,6 +46,11 @@ services:
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
+      # Demo pública: id del negocio de demostración del equipo (vacío = demo apagada)
+      - key: DEMO_BUSINESS_ID
+        sync: false
+      - key: DEMO_MAX_AMOUNT
+        value: '1'
 
       # --- Generados y fijos ---
       - key: AUTH_SECRET

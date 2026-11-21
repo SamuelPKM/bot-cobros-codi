@@ -39,6 +39,16 @@ export interface Env {
   CORS_ORIGINS: string[];
   /** WhatsApp Cloud API (Meta). null si no está configurado: la API funciona igual sin él. */
   WHATSAPP: WhatsAppConfig | null;
+  /** Demo pública: cobra con la API key de un negocio de demostración del equipo. null = apagada. */
+  DEMO: DemoConfig | null;
+}
+
+export interface DemoConfig {
+  businessId: number;
+  /** Tope por cobro de cada visitante. */
+  maxAmountCents: number;
+  /** Cobros (push, QR o liga) por sesión por hora. */
+  chargesPerHour: number;
 }
 
 export interface WhatsAppConfig {
@@ -122,6 +132,28 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   if (whatsappPresent.length > 0 && whatsappMissing.length > 0)
     errors.push(`Para activar WhatsApp faltan: ${whatsappMissing.join(', ')}`);
 
+  // Demo pública: opcional.
+  let demo: DemoConfig | null = null;
+  const demoBusiness = text(raw.DEMO_BUSINESS_ID);
+  if (demoBusiness !== undefined) {
+    const businessId = Number(demoBusiness);
+    const maxAmount = Number(text(raw.DEMO_MAX_AMOUNT) ?? 1);
+    const chargesPerHour = Number(text(raw.DEMO_CHARGES_PER_HOUR) ?? 10);
+    if (!Number.isInteger(businessId) || businessId <= 0)
+      errors.push(
+        'DEMO_BUSINESS_ID debe ser el id (número) del negocio de demostración',
+      );
+    if (!Number.isFinite(maxAmount) || maxAmount <= 0)
+      errors.push('DEMO_MAX_AMOUNT debe ser un monto en pesos mayor a 0');
+    if (!Number.isInteger(chargesPerHour) || chargesPerHour <= 0)
+      errors.push('DEMO_CHARGES_PER_HOUR debe ser un entero mayor a 0');
+    demo = {
+      businessId,
+      maxAmountCents: Math.round(maxAmount * 100),
+      chargesPerHour,
+    };
+  }
+
   if (errors.length > 0) {
     throw new Error(
       `Configuración inválida (revisa tu .env):\n- ${errors.join('\n- ')}`,
@@ -155,5 +187,6 @@ export function validateEnv(raw: Record<string, unknown>): Env {
             apiVersion: text(raw.WHATSAPP_API_VERSION) ?? 'v23.0',
           }
         : null,
+    DEMO: demo,
   };
 }

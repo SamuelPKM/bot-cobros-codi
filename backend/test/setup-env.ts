@@ -20,3 +20,7 @@ process.env.WHATSAPP_TOKEN = 'token-meta-pruebas';
 process.env.WHATSAPP_PHONE_NUMBER_ID = '1234567890';
 process.env.WHATSAPP_APP_SECRET = 'secreto-de-la-app-de-meta';
 process.env.WHATSAPP_VERIFY_TOKEN = 'token-de-verificacion';
+// Demo pública: el primer negocio que crea cada prueba (id 1 tras reiniciar la base).
+process.env.DEMO_BUSINESS_ID = '1';
+process.env.DEMO_MAX_AMOUNT = '1';
+process.env.DEMO_CHARGES_PER_HOUR = '5';

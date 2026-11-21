@@ -25,6 +25,7 @@ describe('validateEnv', () => {
       TRUST_PROXY: false,
       CORS_ORIGINS: [],
       WHATSAPP: null,
+      DEMO: null,
     });
   });
 
@@ -165,5 +166,42 @@ describe('validateEnv', () => {
     expect(() => validateEnv({})).toThrow(
       /DATABASE_URL[\s\S]*AUTH_SECRET[\s\S]*ENCRYPTION_KEY/,
     );
+  });
+
+  describe('DEMO', () => {
+    it('con DEMO_BUSINESS_ID se activa con tope de $1.00 y 10 cobros por hora', () => {
+      expect(validateEnv({ ...base, DEMO_BUSINESS_ID: '7' }).DEMO).toEqual({
+        businessId: 7,
+        maxAmountCents: 100,
+        chargesPerHour: 10,
+      });
+    });
+
+    it('acepta otro tope en pesos y otro límite por hora', () => {
+      expect(
+        validateEnv({
+          ...base,
+          DEMO_BUSINESS_ID: '7',
+          DEMO_MAX_AMOUNT: '5.50',
+          DEMO_CHARGES_PER_HOUR: '3',
+        }).DEMO,
+      ).toEqual({ businessId: 7, maxAmountCents: 550, chargesPerHour: 3 });
+    });
+
+    it('rechaza valores que no son números válidos', () => {
+      expect(() => validateEnv({ ...base, DEMO_BUSINESS_ID: 'abc' })).toThrow(
+        /DEMO_BUSINESS_ID/,
+      );
+      expect(() =>
+        validateEnv({ ...base, DEMO_BUSINESS_ID: '7', DEMO_MAX_AMOUNT: '0' }),
+      ).toThrow(/DEMO_MAX_AMOUNT/);
+      expect(() =>
+        validateEnv({
+          ...base,
+          DEMO_BUSINESS_ID: '7',
+          DEMO_CHARGES_PER_HOUR: '-1',
+        }),
+      ).toThrow(/DEMO_CHARGES_PER_HOUR/);
+    });
   });
 });

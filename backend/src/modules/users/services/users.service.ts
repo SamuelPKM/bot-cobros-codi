@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomBytes } from 'node:crypto';
 import { EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { hashPassword } from '../../../shared/security/password';
 import { User } from '../entities/user.entity';
@@ -28,7 +29,7 @@ export class UsersService {
 
   /** Un usuario solo si es de ese negocio (para que un admin no toque a gente de otro). */
   findInBusiness(id: number, businessId: number): Promise<User | null> {
-    return this.repo.findOneBy({ id, businessId });
+    return this.repo.findOneBy({ id, businessId, demoVisitor: false });
   }
 
   findByUsername(username: string): Promise<User | null> {
@@ -41,6 +42,7 @@ export class UsersService {
       .createQueryBuilder('user')
       .addSelect('user.passwordHash')
       .where('user.username = :username', { username: username.trim() })
+      .andWhere('NOT user.demoVisitor')
       .getOne();
   }
 
@@ -48,6 +50,7 @@ export class UsersService {
     return this.repo.find({
       where: {
         businessId: filter.businessId,
+        demoVisitor: false,
         ...(filter.role ? { role: filter.role } : {}),
       },
       order: { id: 'ASC' },
@@ -81,6 +84,29 @@ export class UsersService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Vendedor desechable para una sesión de la demo pública: contraseña al azar
+   * que nadie conoce y el tope de la demo. Así cada visitante tiene sus propios
+   * borradores, cobros y resumen.
+   */
+  async createDemoVisitor(
+    businessId: number,
+    maxAmountCents: number,
+  ): Promise<User> {
+    const saved = await this.repo.save(
+      this.repo.create({
+        businessId,
+        username: `demo-${randomBytes(8).toString('hex')}`,
+        name: 'Visitante de la demo',
+        role: 'seller',
+        passwordHash: await hashPassword(randomBytes(32).toString('base64url')),
+        maxAmountCents,
+        demoVisitor: true,
+      }),
+    );
+    return (await this.repo.findOneBy({ id: saved.id }))!;
   }
 
   async update(id: number, input: UpdateUserInput): Promise<User> {
