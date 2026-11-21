@@ -16,6 +16,8 @@ export interface ApiRequestOptions {
   token?: string;
   /** Headers solo de esta llamada (p. ej. X-Demo-Session). */
   headers?: Record<string, string>;
+  /** 'text' para el CSV: el cuerpo tal cual, con su BOM. Por defecto JSON. */
+  responseType?: 'json' | 'text';
 }
 
 export interface ApiClientOptions {
@@ -33,7 +35,12 @@ export function createApiClient({ baseUrl, fetch, headers: fixed = {} }: ApiClie
   const root = baseUrl.replace(/\/+$/, '');
 
   async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-    const headers = new Headers({ ...fixed, ...options.headers, accept: 'application/json' });
+    const asText = options.responseType === 'text';
+    const headers = new Headers({
+      ...fixed,
+      ...options.headers,
+      accept: asText ? 'text/csv' : 'application/json',
+    });
     if (options.body !== undefined) headers.set('content-type', 'application/json');
     if (options.token) headers.set('authorization', `Bearer ${options.token}`);
 
@@ -50,6 +57,9 @@ export function createApiClient({ baseUrl, fetch, headers: fixed = {} }: ApiClie
     }
 
     if (response.status === 204) return null as T;
+    if (asText && response.ok)
+      // TextDecoder con ignoreBOM conserva el BOM, que Excel necesita para leer los acentos.
+      return new TextDecoder('utf-8', { ignoreBOM: true }).decode(await response.arrayBuffer()) as T;
     const data: unknown = await response.json().catch(() => null);
     if (!response.ok) throw new ApiError(response.status, messageOf(data));
     return data as T;

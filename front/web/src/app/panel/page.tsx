@@ -6,6 +6,7 @@ import { WebhookReminder } from '@/features/businesses/components/webhook-remind
 import { getMyBusiness } from '@/features/businesses/services/business.service';
 import { ChargesTable } from '@/features/charges/components/charges-table';
 import { listCharges } from '@/features/charges/services/charges.service';
+import { CsvDownloadForm } from '@/features/reports/components/csv-download-form';
 import { TodaySummary } from '@/features/reports/components/today-summary';
 import { getTodaySummary } from '@/features/reports/services/reports.service';
 import { primaryButton } from '@/shared/ui/styles';
@@ -46,6 +47,7 @@ async function PanelContent() {
           {isAdmin ? 'Cobros del negocio' : 'Tus cobros'}
         </h2>
         <ChargesTable charges={charges} showSeller={isAdmin} />
+        <CsvDownloadForm />
       </section>
     </>
   );

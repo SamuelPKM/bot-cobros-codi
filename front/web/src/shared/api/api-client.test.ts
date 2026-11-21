@@ -52,6 +52,18 @@ describe('createApiClient', () => {
     expect(new Headers(init.headers).has('authorization')).toBe(false);
   });
 
+  it('con responseType text devuelve el cuerpo tal cual (el CSV)', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response('﻿id,monto\r\n1,150.00\r\n', { status: 200, headers: { 'content-type': 'text/csv' } }),
+    );
+    await expect(
+      createApiClient({ baseUrl: 'https://api.test', fetch }).request('/reports/charges.csv', {
+        responseType: 'text',
+      }),
+    ).resolves.toBe('﻿id,monto\r\n1,150.00\r\n');
+    expect(new Headers(fetch.mock.calls[0][1].headers).get('accept')).toBe('text/csv');
+  });
+
   it('204 devuelve null', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     await expect(

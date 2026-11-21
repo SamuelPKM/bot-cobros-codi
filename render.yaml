@@ -37,9 +37,6 @@ services:
       # Orígenes de navegador que llaman la API: la web y la demo de Expo web, separados por coma
       - key: CORS_ORIGINS
         sync: false
-      # El mismo valor que FRONT_PROXY_SECRET de la web: con él la API recibe la IP real del visitante
-      - key: FRONT_PROXY_SECRET
-        sync: false
       # WhatsApp Cloud API (Meta): las cuatro o ninguna (déjalas vacías para no usar WhatsApp)
       - key: WHATSAPP_TOKEN
         sync: false
@@ -66,3 +63,33 @@ services:
         value: 'true'
       - key: TRUST_PROXY
         value: 'true'
+      # FRONT_PROXY_SECRET, compartido con la web
+      - fromGroup: cobrale-compartido
+
+  # La web (Next.js): todas las pantallas. Llama a la API desde su servidor.
+  - type: web
+    name: cobrale-web
+    runtime: node
+    rootDir: front/web
+    plan: free
+    region: ohio
+    branch: main
+    buildCommand: npm ci && npm run build
+    # next start usa el PORT que pone Render.
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      # URL pública de la API: https://<cobrale-api>.onrender.com (sin / al final)
+      - key: API_URL
+        sync: false
+      - fromGroup: cobrale-compartido
+
+envVarGroups:
+  # Mismo valor en la API y en la web: con él la web manda la IP real de cada
+  # visitante y la API la acepta (si no, los límites por IP serían globales).
+  - name: cobrale-compartido
+    envVars:
+      - key: FRONT_PROXY_SECRET
+        generateValue: true

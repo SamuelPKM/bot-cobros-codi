@@ -12,7 +12,9 @@ No es un producto oficial de pey ni de Banco de México.
 | [front/](front/) | Una carpeta por aplicación de front: [front/web](front/web/) (Next.js) y, más adelante, front/mobile (Expo) |
 | [docs/](docs/) | [Plan de la migración](docs/plan-nest-next.md) y documentos de entrega del hackatón |
 
-## Arranque rápido (API)
+## Arranque rápido
+
+API (puerto 3000), con Postgres en Docker:
 
 ```bash
 cd backend
@@ -23,4 +25,13 @@ npm run migration:run
 npm run start:dev
 ```
 
-Deploy y primer cobro real de $0.01: [backend/docs/deploy.md](backend/docs/deploy.md).
+Web (puerto 3001), en otra terminal:
+
+```bash
+cd front/web
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Deploy de los dos servicios en Render y primer cobro real de $0.01: [backend/docs/deploy.md](backend/docs/deploy.md).
