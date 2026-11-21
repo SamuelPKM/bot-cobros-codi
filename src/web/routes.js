@@ -15,6 +15,7 @@
 //   GET  /panel/cobros.csv         todos los cobros
 //   GET  /panel/api/cobros[/:id]   estados para actualizar el panel en vivo
 //   GET  /panel/ajustes            tus datos y tu WhatsApp; negocio y CLABE (solo administrador)
+//   POST /panel/ajustes/pey/llave | webhook | desconectar   cuenta de pey propia (solo administrador)
 //   GET  /panel/equipo             personas del negocio, invitar, roles (solo administrador)
 //   GET  /invitacion/:token        la persona invitada elige su contraseña
 
@@ -23,6 +24,7 @@ import express from 'express';
 import { normalizePhone, parseAmount } from '../command.js';
 import { money } from '../messages.js';
 import { toCents } from '../pey.js';
+import { peyAccountStatus } from '../pey-accounts.js';
 import { createAuth, hashPassword, hashToken, MIN_PASSWORD_LENGTH, newToken, verifyPassword } from './auth.js';
 import {
   authPage,
@@ -58,6 +60,9 @@ const FLASH = {
   reactivado: 'Reactivamos a esa persona. Si no tenía contraseña, genera una nueva liga de invitación.',
   unido: 'Ya eres parte del equipo. Crea tu primer cobro.',
   clabe: 'Registramos tu CLABE. Banxico la valida en hasta 5 días hábiles.',
+  peyLlave: 'pey reconoció tu API key. Falta el último paso: conectar el aviso de pagos.',
+  peyConectada: 'Listo: tu cuenta de pey está conectada. Haz un cobro de $0.01 para probarla.',
+  peyDesconectada: 'Desconectamos tu cuenta de pey. Los cobros nuevos salen por la cuenta de Cóbrale.',
   desligado: 'Tu WhatsApp ya no está ligado a esta cuenta.',
 };
 
@@ -90,6 +95,7 @@ export function mountWeb(
   {
     store,
     charges,
+    peyAccounts = null,
     limits,
     publicBaseUrl = null,
     registrationOpen = true,
@@ -124,6 +130,17 @@ export function mountWeb(
   const wrap = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
   const ctxFor = (req) => charges.contextFor(req.merchant, { channel: 'web', user: req.user });
   const isAdmin = (req) => req.user?.role === 'admin';
+  /** El negocio para las vistas, con si cobra por su propia cuenta de pey. */
+  const viewMerchant = (req) => ({ ...req.merchant, peyConnected: Boolean(peyAccounts?.accountFor(req.merchant)) });
+  const peyInfo = (merchant) =>
+    peyAccounts && {
+      enabled: peyAccounts.enabled,
+      status: peyAccountStatus(merchant),
+      last4: merchant.peyKeyLast4,
+      webhookUrl: peyAccounts.webhookUrl(merchant),
+      connectedAt: merchant.peyConnectedAt,
+      lastEventAt: merchant.peyLastEventAt,
+    };
   const baseUrl = (req) => publicBaseUrl ?? `${req.protocol}://${req.get('host')}`;
 
   // ------------------------------------------------------------- públicas
@@ -289,7 +306,7 @@ export function mountWeb(
       res,
       panelPage({
         user: req.user,
-        merchant: req.merchant,
+        merchant: viewMerchant(req),
         csrf: req.csrfToken,
         limits,
         summary,
@@ -448,13 +465,14 @@ export function mountWeb(
 
   // -------------------------------------------------------------- ajustes
 
-  function renderSettings(req, res, { user = req.user, error = null, linkCode = null, values = {}, status = 200 } = {}) {
+  function renderSettings(req, res, { user = req.user, merchant = req.merchant, error = null, linkCode = null, values = {}, status = 200 } = {}) {
     const activeCode = linkCode ?? (user.linkCode && user.linkCodeExpiresAt > now() ? user.linkCode : null);
     return send(
       res,
       settingsPage({
         user,
-        merchant: req.merchant,
+        merchant,
+        pey: peyInfo(merchant),
         csrf: req.csrfToken,
         flash: FLASH[req.query.ok] ?? null,
         error,
@@ -543,6 +561,53 @@ export function mountWeb(
       });
       if (!result.ok) return renderSettings(req, res, { error: plain(result.message), values, status: 422 });
       return res.redirect(303, '/panel/ajustes?ok=clabe#clabe');
+    }),
+  );
+
+  // ------------------------------------------------- cuenta de pey propia
+
+  const peyAction = (run) =>
+    wrap(async (req, res) => {
+      if (!peyAccounts || req.merchant.isDemo) return renderSettings(req, res, { error: 'Esta cuenta no puede conectar una cuenta de pey propia.', status: 403 });
+      if (!(await store.hit(`pey-account:${req.merchant.id}`, { limit: 10, windowMs: 60 * MINUTE }))) {
+        return renderSettings(req, res, { error: 'Demasiados intentos. Espera una hora.', status: 429 });
+      }
+      return run(req, res);
+    });
+
+  panel.post(
+    '/ajustes/pey/llave',
+    form,
+    auth.checkForm,
+    auth.requireAdmin,
+    peyAction(async (req, res) => {
+      const result = await peyAccounts.saveApiKey(req.merchant, req.body.llave);
+      if (!result.ok) return renderSettings(req, res, { error: result.message, status: 422 });
+      return res.redirect(303, '/panel/ajustes?ok=peyLlave#pey');
+    }),
+  );
+
+  panel.post(
+    '/ajustes/pey/webhook',
+    form,
+    auth.checkForm,
+    auth.requireAdmin,
+    peyAction(async (req, res) => {
+      const result = await peyAccounts.saveWebhookSecret(req.merchant, req.body.secreto);
+      if (!result.ok) return renderSettings(req, res, { error: result.message, status: 422 });
+      return res.redirect(303, '/panel/ajustes?ok=peyConectada#pey');
+    }),
+  );
+
+  panel.post(
+    '/ajustes/pey/desconectar',
+    form,
+    auth.checkForm,
+    auth.requireAdmin,
+    peyAction(async (req, res) => {
+      const result = await peyAccounts.disconnect(req.merchant);
+      if (!result.ok) return renderSettings(req, res, { error: result.message, status: 422 });
+      return res.redirect(303, '/panel/ajustes?ok=peyDesconectada#pey');
     }),
   );
 

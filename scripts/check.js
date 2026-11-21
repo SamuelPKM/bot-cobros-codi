@@ -11,7 +11,7 @@ if (major < 22 || (major === 22 && minor < 5)) {
 }
 
 const modules = [
-  'app', 'bot', 'charges', 'clabe', 'command', 'config', 'demo', 'messages', 'outbox', 'pey', 'sweeper', 'whatsapp',
+  'app', 'bot', 'charges', 'clabe', 'command', 'config', 'demo', 'messages', 'outbox', 'pey', 'pey-accounts', 'secrets', 'sweeper', 'whatsapp',
   'db/connection', 'db/schema', 'db/store', 'web/auth', 'web/routes', 'web/views',
 ];
 for (const name of modules) {

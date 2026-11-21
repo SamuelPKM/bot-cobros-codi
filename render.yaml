@@ -39,6 +39,12 @@ services:
       - key: TRUSTED_EMAILS
         sync: false
 
+      # Cifra las API keys de pey que conectan los negocios. Render la genera
+      # al aplicar el Blueprint; si se cambia, cada negocio tiene que volver a
+      # conectar su cuenta de pey.
+      - key: SECRETS_KEY
+        generateValue: true
+
       # --- Configuración ---
       - key: DEMO_ENABLED
         value: "true"

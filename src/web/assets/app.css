@@ -139,3 +139,19 @@ select { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; b
 .row-2 { grid-template-columns: 1fr 1fr; }
 @media (max-width: 520px) { .row-2 { grid-template-columns: 1fr; } .who { display: none; } }
 .alert p { margin: 0 0 8px; }
+
+.wizard { list-style: none; padding: 0; margin: 12px 0 0; counter-reset: paso; }
+.wizard > li { position: relative; padding: 0 0 14px 44px; margin: 0; counter-increment: paso; }
+.wizard > li::before { content: counter(paso); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; background: var(--muted-bg); color: var(--muted); border: 1px solid var(--line); }
+.wizard > li.current::before { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.wizard > li.done::before { content: "✓"; background: var(--ok-bg); color: var(--ok-text); border-color: var(--ok-line); }
+.wizard > li.todo { color: var(--muted); }
+.wizard > li:not(:last-child)::after { content: ""; position: absolute; left: 15px; top: 34px; bottom: 4px; border-left: 2px solid var(--line); }
+.wizard h3 { font-size: 16px; margin: 3px 0 8px; }
+.wizard ol { padding-left: 20px; margin: 0 0 10px; }
+.wizard ol li { margin: 4px 0; }
+.wizard .copy { margin-top: 6px; }
+.more { margin: 12px 0; }
+.more summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.more .form { margin-top: 10px; }
+.wizard .link-button, .actions .link-button { color: var(--accent); text-decoration: underline; }

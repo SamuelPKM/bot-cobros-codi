@@ -166,6 +166,15 @@ export function createPeyClient({ apiKey, baseUrl = 'https://api.pey.mx', fetchI
       return request('GET', `/bank-account/${encodeURIComponent(id)}`);
     },
 
+    /**
+     * GET /transaction/api-key — transacciones de la API key. Solo lee, así que
+     * sirve para comprobar que una API key es válida sin crear nada.
+     */
+    async listApiKeyTransactions() {
+      const page = await request('GET', '/transaction/api-key');
+      return page.items ?? [];
+    },
+
     /** GET /transaction/codi/qr/{id} — pagos recibidos por un QR (la primera página basta: 20). */
     async listQrTransactions(qrId) {
       const page = await request('GET', `/transaction/codi/qr/${encodeURIComponent(qrId)}`);

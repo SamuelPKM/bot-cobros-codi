@@ -41,9 +41,10 @@ El repositorio `bot-cobros-codi` es privado y está en la cuenta de GitHub `Samu
     - `DEMO_ACCOUNT_EMAIL` y `DEMO_ACCOUNT_PASSWORD`: la cuenta con la que entrará el jurado a la web, por ejemplo `jurado@cobrale.mx` y una contraseña de al menos 10 caracteres. Van en las instrucciones de prueba.
     - `TRUSTED_EMAILS`: tu correo, si quieres cobrar sin el límite del modo prueba mientras Banxico valida tu CLABE.
     - `PEY_WEBHOOK_SECRET`: déjalo vacío por ahora; se llena en el paso 6.
+    - `SECRETS_KEY` no la pide: Render la genera sola. Cifra las API keys de pey que conectan los negocios desde Ajustes. **No la cambies**: si cambia, cada negocio tendrá que volver a conectar su cuenta.
 3. Da clic en **Apply**.
 
-**Si ya habías creado el servicio** con una versión anterior del Blueprint, agrega esas variables a mano en el servicio > **Environment**. La más importante es `DATABASE_URL`.
+**Si ya habías creado el servicio** con una versión anterior del Blueprint, agrega esas variables a mano en el servicio > **Environment**. La más importante es `DATABASE_URL`. Para `SECRETS_KEY`, usa **Generate** en Render o pega un texto aleatorio de 32 caracteres o más (por ejemplo, la salida de `openssl rand -base64 48`), y guárdalo en un lugar seguro.
 
 ### Si creaste el servicio a mano, sin el Blueprint
 

@@ -112,6 +112,12 @@ export function fakePey() {
       return qr.transactions;
     },
 
+    /** Valida la API key: con `pey.rejectKey = true` responde 401, como una llave inválida. */
+    async listApiKeyTransactions() {
+      if (pey.rejectKey) throw new PeyError('Unauthorized', { status: 401, type: 'UNAUTHORIZED' });
+      return [];
+    },
+
     async registerBankAccount(input) {
       if (pey.fail) {
         const error = pey.fail;

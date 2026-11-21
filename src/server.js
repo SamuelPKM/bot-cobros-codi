@@ -7,6 +7,8 @@ import { migrate } from './db/schema.js';
 import { createStore } from './db/store.js';
 import { createOutbox } from './outbox.js';
 import { createPeyClient } from './pey.js';
+import { createPeyAccounts } from './pey-accounts.js';
+import { createSecretBox } from './secrets.js';
 import { createSweeper } from './sweeper.js';
 import { hashPassword } from './web/auth.js';
 import { mountWeb } from './web/routes.js';
@@ -17,6 +19,14 @@ const db = await connect({ url: config.databaseUrl, dataDir: config.databaseDir 
 await migrate(db);
 const store = createStore(db);
 const pey = createPeyClient({ apiKey: config.peyApiKey, baseUrl: config.peyBaseUrl });
+// Cuentas de pey propias de los negocios (opcional: necesita SECRETS_KEY).
+const peyAccounts = createPeyAccounts({
+  store,
+  platform: pey,
+  makeClient: (apiKey) => createPeyClient({ apiKey, baseUrl: config.peyBaseUrl }),
+  secrets: config.secretsKey ? createSecretBox(config.secretsKey) : null,
+  publicBaseUrl: config.publicBaseUrl,
+});
 
 // Las respuestas van a WhatsApp o a la conversación de la demo web, según a quién.
 // Sin WhatsApp configurado, lo que iría a WhatsApp solo sale en la terminal.
@@ -28,6 +38,7 @@ let sweeper = null;
 const charges = createCharges({
   store,
   pey,
+  peyAccounts,
   outbox,
   limits: config.limits,
   publicBaseUrl: config.publicBaseUrl,
@@ -52,6 +63,7 @@ if (config.web.demoAccount) {
 const app = createApp({
   peyWebhookSecret: config.peyWebhookSecret,
   pey,
+  peyAccounts,
   store,
   trustProxy: config.trustProxy,
   onPaid: async (charge) => {
@@ -73,6 +85,7 @@ const app = createApp({
     mountWeb(target, {
       store,
       charges,
+      peyAccounts,
       limits: config.limits,
       publicBaseUrl: config.publicBaseUrl,
       registrationOpen: config.web.registrationOpen,
@@ -98,6 +111,11 @@ const server = app.listen(config.port, () => {
   console.log(config.whatsapp ? 'Webhook de WhatsApp: /webhooks/whatsapp' : 'WhatsApp:            sin configurar (faltan las variables WHATSAPP_*)');
   console.log(config.demo ? `Demo web pública:    /demo  (máximo $${(config.limits.maxAmountCents / 100).toFixed(2)} por cobro)` : 'Demo web:            desactivada (DEMO_ENABLED=true para activarla)');
   if (!config.publicBaseUrl) console.log('Ligas de pago:       desactivadas (falta PUBLIC_BASE_URL)');
+  console.log(
+    peyAccounts.enabled
+      ? 'Cuentas pey propias: activadas (webhooks en /webhooks/pey/n/<token>)'
+      : 'Cuentas pey propias: desactivadas (falta SECRETS_KEY)',
+  );
 });
 
 // Al apagar (por ejemplo en un despliegue), se cierran las conexiones limpio.

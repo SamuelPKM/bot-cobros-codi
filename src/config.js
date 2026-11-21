@@ -24,6 +24,9 @@ export function loadConfig() {
     peyApiKey: required('PEY_API_KEY'),
     peyWebhookSecret: process.env.PEY_WEBHOOK_SECRET || null,
     peyBaseUrl: process.env.PEY_BASE_URL || 'https://api.pey.mx',
+    // Llave para cifrar las API keys de pey que conectan los negocios. Sin ella
+    // no se pueden conectar cuentas propias (todo lo demás funciona igual).
+    secretsKey: process.env.SECRETS_KEY || null,
     port: Number(process.env.PORT || 3000),
 
     // Con DATABASE_URL se usa Postgres (por ejemplo Neon). Sin ella, PGlite
@@ -57,6 +60,8 @@ export function loadConfig() {
     demo: null,
     whatsapp: null,
   };
+
+  if (config.secretsKey && config.secretsKey.length < 32) fail('SECRETS_KEY debe tener al menos 32 caracteres.');
 
   if (config.publicBaseUrl && !config.publicBaseUrl.startsWith('https://')) {
     fail('PUBLIC_BASE_URL debe empezar con https://.');

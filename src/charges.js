@@ -44,11 +44,15 @@ export function createCharges({
   outbox,
   limits,
   publicBaseUrl = null,
+  peyAccounts = null, // cuentas de pey propias de cada negocio (pey-accounts.js), opcional
   renderQr = renderQrPng,
   onActivity = () => {}, // se llama cuando hay algo nuevo que puede vencer (para agendar el barrido)
   now = Date.now,
   log = console,
 }) {
+  /** El cliente de pey de un cobro: el de la cuenta propia del negocio o el del proyecto. */
+  const peyOf = async (peyMerchantId) => (peyMerchantId && peyAccounts ? peyAccounts.clientFor(peyMerchantId) : pey);
+
   // ------------------------------------------------------------ contexto
 
   /**
@@ -74,9 +78,12 @@ export function createCharges({
         notifyTo,
         limited: true,
         bankAccountId: null,
+        peyMerchantId: null,
       };
     }
-    const ownBank = merchant.bankStatus === 'ACTIVE' ? merchant.bankAccountId : null;
+    // Con cuenta de pey propia, el dinero llega a la cuenta de pago de su API key.
+    const ownPey = merchant.isDemo ? null : (peyAccounts?.accountFor(merchant) ?? null);
+    const ownBank = !ownPey && merchant.bankStatus === 'ACTIVE' ? merchant.bankAccountId : null;
     const isAdmin = user?.role === 'admin';
     return {
       merchantId: merchant.id,
@@ -88,9 +95,10 @@ export function createCharges({
       name: merchant.businessName,
       channel,
       notifyTo,
-      // Sin CLABE propia activa, el dinero llega a la cuenta del proyecto: se limita.
-      limited: merchant.isDemo || !(merchant.isTrusted || ownBank),
+      // Sin CLABE propia activa ni cuenta de pey propia, el dinero llega a la cuenta del proyecto: se limita.
+      limited: merchant.isDemo || !(merchant.isTrusted || ownBank || ownPey),
       bankAccountId: ownBank,
+      peyMerchantId: ownPey,
     };
   }
 
@@ -147,6 +155,7 @@ export function createCharges({
       concept,
       status: 'awaiting_confirmation',
       createdBy: ctx.userId,
+      peyMerchantId: ctx.peyMerchantId,
     });
     return { ok: true, charge, message: texts.confirmPrompt(charge) };
   }
@@ -170,10 +179,13 @@ export function createCharges({
       return fail('limit', limited);
     }
     if (!(await store.transition(charge.id, 'awaiting_confirmation', 'sending'))) return fail('duplicate', null);
+    // Si el negocio conectó o desconectó su cuenta de pey entre el borrador y el "sí", vale la de ahora.
+    if ((charge.peyMerchantId ?? null) !== ctx.peyMerchantId) await store.updateCharge(charge.id, { peyMerchantId: ctx.peyMerchantId });
 
     const expiresAt = now() + MIN_EXPIRATION_SECONDS * 1000;
     try {
-      const { transactionId, codiId } = await pey.createPush({
+      const client = await peyOf(ctx.peyMerchantId);
+      const { transactionId, codiId } = await client.createPush({
         amount: charge.amountCents / 100,
         phoneNumber: charge.payerPhone,
         concept: payerConcept(ctx.name, charge.concept),
@@ -228,6 +240,7 @@ export function createCharges({
       status: 'creating',
       bankAccountId: ctx.bankAccountId,
       createdBy: ctx.userId,
+      peyMerchantId: ctx.peyMerchantId,
     });
   }
 
@@ -249,7 +262,7 @@ export function createCharges({
 
     const charge = await newCharge(ctx, 'link', { amountCents, concept });
     try {
-      const { id, url } = await pey.createPaymentLink({ amount: amountCents / 100, ...linkUrls(charge) });
+      const { id, url } = await (await peyOf(charge.peyMerchantId)).createPaymentLink({ amount: amountCents / 100, ...linkUrls(charge) });
       const created = await store.updateCharge(charge.id, { status: 'link', linkId: id, linkUrl: url, bankAccountId: null });
       return { ok: true, charge: created, message: texts.directLink(created) };
     } catch (error) {
@@ -266,7 +279,7 @@ export function createCharges({
 
     const charge = await newCharge(ctx, 'qr', { amountCents, concept });
     try {
-      const qr = await pey.createQr({
+      const qr = await (await peyOf(charge.peyMerchantId)).createQr({
         amount: amountCents / 100,
         concept: payerConcept(ctx.name, concept),
         expiration: QR_EXPIRATION_SECONDS,
@@ -301,7 +314,7 @@ export function createCharges({
     if (!(await store.transition(charge.id, 'expired', 'link_creating'))) return fail('duplicate', null);
 
     try {
-      const { id, url } = await pey.createPaymentLink({ amount: charge.amountCents / 100, ...linkUrls(charge) });
+      const { id, url } = await (await peyOf(charge.peyMerchantId)).createPaymentLink({ amount: charge.amountCents / 100, ...linkUrls(charge) });
       const updated = await store.updateCharge(charge.id, { status: 'link', linkId: id, linkUrl: url, bankAccountId: null });
       return { ok: true, charge: updated, message: texts.link(updated) };
     } catch (error) {
@@ -373,12 +386,13 @@ export function createCharges({
 
   /** Busca en la API si un cobro vencido sí se pagó. Devuelve la transacción pagada o null. */
   async function findPayment(charge) {
+    const client = await peyOf(charge.peyMerchantId);
     if (charge.kind === 'qr' && charge.qrId) {
-      const items = await pey.listQrTransactions(charge.qrId);
+      const items = await client.listQrTransactions(charge.qrId);
       return items.find((tx) => tx.status === 'PAID') ?? null;
     }
     if (charge.transactionId) {
-      const tx = await pey.getTransaction(charge.transactionId);
+      const tx = await client.getTransaction(charge.transactionId);
       return tx.status === 'PAID' ? tx : null;
     }
     return null;

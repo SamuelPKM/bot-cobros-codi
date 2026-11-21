@@ -34,6 +34,7 @@ const CHARGE_COLUMNS = {
   paidAt: 'paid_at',
   notifiedAt: 'notified_at',
   createdBy: 'created_by',
+  peyMerchantId: 'pey_merchant_id',
 };
 
 // Un negocio. Sus personas (administradores y vendedores) están en `users`.
@@ -47,6 +48,13 @@ const MERCHANT_COLUMNS = {
   bankClabeLast4: 'bank_clabe_last4',
   bankHolder: 'bank_holder',
   bankCheckedAt: 'bank_checked_at',
+  // Cuenta de pey propia (opcional). La API key y el secreto van cifrados.
+  peyKeySealed: 'pey_key_sealed',
+  peyKeyLast4: 'pey_key_last4',
+  peyWebhookToken: 'pey_webhook_token',
+  peyWebhookSecretSealed: 'pey_webhook_secret_sealed',
+  peyConnectedAt: 'pey_connected_at',
+  peyLastEventAt: 'pey_last_event_at',
   createdAt: 'created_at',
 };
 
@@ -109,11 +117,12 @@ export function createStore(db, { now = Date.now } = {}) {
       status,
       bankAccountId = null,
       createdBy = null,
+      peyMerchantId = null,
     }) {
       const row = await db.one(
-        `INSERT INTO charges (kind, channel, merchant_id, owner_key, notify_to, payer_phone, amount_cents, concept, status, bank_account_id, created_by, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-        [kind, channel, merchantId, ownerKey, notifyTo, payerPhone, amountCents, concept, status, bankAccountId, createdBy, now()],
+        `INSERT INTO charges (kind, channel, merchant_id, owner_key, notify_to, payer_phone, amount_cents, concept, status, bank_account_id, created_by, pey_merchant_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+        [kind, channel, merchantId, ownerKey, notifyTo, payerPhone, amountCents, concept, status, bankAccountId, createdBy, peyMerchantId, now()],
       );
       return toCharge(row);
     },
@@ -302,6 +311,20 @@ export function createStore(db, { now = Date.now } = {}) {
 
     async getMerchant(id) {
       return toMerchant(await db.one('SELECT * FROM merchants WHERE id = $1', [id]));
+    },
+
+    async getMerchantByWebhookToken(token) {
+      return toMerchant(await db.one('SELECT * FROM merchants WHERE pey_webhook_token = $1', [token]));
+    },
+
+    /** Cobros de un negocio, hechos con su propia API key, que todavía pueden pagarse. */
+    async countOpenWithPeyAccount(merchantId) {
+      const row = await db.one(
+        `SELECT COUNT(*) AS n FROM charges
+          WHERE pey_merchant_id = $1 AND status IN ('sending', 'pending', 'unknown', 'qr', 'link', 'link_creating', 'creating')`,
+        [merchantId],
+      );
+      return Number(row.n);
     },
 
     async getMerchantByBankAccountId(bankAccountId) {

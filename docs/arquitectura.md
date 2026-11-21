@@ -69,6 +69,19 @@ Mientras Banxico la activa, el comerciante está en **modo prueba**: cobros de h
 
 pey avisa por webhook cuando una cuenta queda activa, pero no cuando Banxico la rechaza. Por eso el barrido revisa cada hora las cuentas en validación.
 
+## Cuenta de pey propia de un negocio
+
+Como alternativa a la CLABE, un negocio puede conectar su propia cuenta de pey, y entonces también las ligas de pago le llegan a él. pey no tiene API para crear cuentas ni API keys, así que el asistente de Ajustes guía al administrador por el portal (perfil, cuenta de pago CoDi en Finanzas y API key en Desarrollador) y luego:
+
+1. **API key.** Cóbrale la comprueba con `GET /transaction/api-key`, que solo lee, y la guarda cifrada con AES-256-GCM (`src/secrets.js`, llave `SECRETS_KEY`). Genera una URL de webhook propia del negocio, `/webhooks/pey/n/<token>`, con un token aleatorio de 192 bits.
+2. **Webhook.** El administrador registra esa URL en pey y pega el secreto (`whsec_…`), que también se guarda cifrado. Hasta este paso los cobros siguen saliendo por la cuenta del proyecto.
+
+Ya conectada, el negocio sale del modo prueba y cada cobro nuevo guarda con qué cuenta se creó (`charges.pey_merchant_id`; vacío es la del proyecto). Todo lo que se hace después con ese cobro usa la misma API key: confirmarlo contra la API, buscar si se pagó al vencer o crear la liga de un push expirado (`src/pey-accounts.js`, `clientFor`).
+
+**Cada cuenta solo marca sus propios cobros.** Un webhook se verifica con el secreto de la cuenta dueña de la URL, se confirma con su API key, y el cobro tiene que haberse creado con esa misma cuenta. Así un negocio no puede marcar como pagado el cobro de otro aunque haga un pago real con los mismos `metadata` y monto (responde `other_account`). Los avisos `bank.account.updated` solo se aceptan en el webhook del proyecto, que es el que registra las CLABE.
+
+Cambiar la API key genera una URL nueva, para que el webhook viejo deje de servir. Desconectar o cambiar la llave no se permite mientras haya cobros en espera hechos con ella, porque nadie podría confirmarlos. Si se pierde `SECRETS_KEY`, las llaves guardadas no se pueden leer y cada negocio tiene que volver a conectar su cuenta.
+
 ## Desarrollo y pruebas
 
 Sin `DATABASE_URL`, Cóbrale usa PGlite: un Postgres real compilado a WebAssembly que corre dentro de Node. El SQL es el mismo en desarrollo, pruebas y producción, sin instalar nada.

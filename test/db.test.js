@@ -12,7 +12,7 @@ describe('esquema', () => {
     await migrate(db);
     await migrate(db);
     const rows = await db.query('SELECT id FROM schema_migrations');
-    assert.deepEqual(rows.map((r) => r.id), [1, 2]);
+    assert.deepEqual(rows.map((r) => r.id), [1, 2, 3]);
     await db.close();
   });
 

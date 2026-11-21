@@ -34,6 +34,7 @@ const bodyText = (req) => (Buffer.isBuffer(req.body) ? req.body.toString('utf8')
 export function createApp({
   peyWebhookSecret = null,
   pey,
+  peyAccounts = null, // cuentas de pey propias: cada una con su webhook en /webhooks/pey/n/<token>
   store,
   onPaid = async () => {},
   onBankAccountUpdated = async () => 'ignored',
@@ -66,49 +67,79 @@ export function createApp({
 
   // ---------------------------------------------------------------- pey
 
-  app.post('/webhooks/pey', rawBody, async (req, res) => {
-    if (!verifier) {
-      log.warn('[pey] llegó un webhook pero falta PEY_WEBHOOK_SECRET: no se puede verificar');
-      return res.status(503).json({ error: 'webhook de pey sin configurar' });
-    }
+  /**
+   * Atiende un webhook de pey de una cuenta: la del proyecto (account.merchantId
+   * null) o la propia de un negocio. Cada cuenta solo puede marcar pagados los
+   * cobros que se crearon con su misma API key.
+   */
+  async function handlePey(req, res, account) {
+    const tag = account.merchantId ? `[pey:${account.merchantId}]` : '[pey]';
     let event;
     try {
-      event = verifier.verify(bodyText(req), req.headers);
+      event = account.verifier.verify(bodyText(req), req.headers);
     } catch (error) {
-      log.warn(`[pey] firma rechazada: ${error.message}`);
+      log.warn(`${tag} firma rechazada: ${error.message}`);
       return res.status(401).json({ error: 'firma inválida' });
     }
 
+    const source = account.merchantId ? `pey:${account.merchantId}` : 'pey';
     const webhookId = req.headers['webhook-id'];
     const type = event?.type;
     try {
-      const recorded = await store.recordEvent('pey', webhookId, type);
+      const recorded = await store.recordEvent(source, webhookId, type);
       if (recorded.processedAt) {
-        log.info(`[pey] ${webhookId} repetido, ya procesado (${recorded.result})`);
+        log.info(`${tag} ${webhookId} repetido, ya procesado (${recorded.result})`);
         return res.json({ ok: true, duplicate: true });
       }
 
       let result = 'ignored';
-      if (CODI_PAYMENT_EVENTS.has(type)) result = await processCodiPayment(event);
-      else if (type === 'payment_link.status_updated') result = await processLinkUpdate(event);
-      else if (type === 'bank.account.updated') result = await onBankAccountUpdated(event);
+      if (CODI_PAYMENT_EVENTS.has(type)) result = await processCodiPayment(event, account);
+      else if (type === 'payment_link.status_updated') result = await processLinkUpdate(event, account);
+      // Las CLABE de los negocios se registran con la API key del proyecto.
+      else if (type === 'bank.account.updated' && !account.merchantId) result = await onBankAccountUpdated(event);
 
-      await store.markEventProcessed('pey', webhookId, result);
-      log.info(`[pey] ${webhookId} ${type} -> ${result}`);
+      await store.markEventProcessed(source, webhookId, result);
+      if (account.merchantId) await peyAccounts.touch(account.merchantId);
+      log.info(`${tag} ${webhookId} ${type} -> ${result}`);
       return res.json({ ok: true, result });
     } catch (error) {
       const requestId = error.requestId ? ` requestId=${error.requestId}` : '';
-      log.error(`[pey] ${webhookId} ${type} falló: ${error.message}${requestId}`);
+      log.error(`${tag} ${webhookId} ${type} falló: ${error.message}${requestId}`);
       return res.status(500).json({ error: 'no se pudo procesar' });
     }
+  }
+
+  app.post('/webhooks/pey', rawBody, (req, res) => {
+    if (!verifier) {
+      log.warn('[pey] llegó un webhook pero falta PEY_WEBHOOK_SECRET: no se puede verificar');
+      return res.status(503).json({ error: 'webhook de pey sin configurar' });
+    }
+    return handlePey(req, res, { merchantId: null, verifier, client: pey });
   });
 
+  // Webhook de la cuenta de pey propia de un negocio. El token de la URL dice de
+  // quién es; la firma, con el secreto de ese negocio, prueba que viene de pey.
+  app.post('/webhooks/pey/n/:token', rawBody, async (req, res) => {
+    let found;
+    try {
+      found = peyAccounts ? await peyAccounts.webhookFor(req.params.token) : null;
+    } catch (error) {
+      log.error(`[pey] no se pudo cargar la cuenta de un webhook: ${error.message}`);
+      return res.status(500).json({ error: 'no se pudo procesar' });
+    }
+    if (!found) return res.status(404).json({ error: 'webhook desconocido' });
+    return handlePey(req, res, { merchantId: found.merchantId, verifier: new Webhook(found.secret), client: found.client });
+  });
+
+  /** ¿Este cobro se creó con la API key de la cuenta que avisa? */
+  const sameAccount = (charge, account) => (charge.peyMerchantId ?? null) === (account.merchantId ?? null);
+
   /** Pago de un push o de un QR. El webhook es el aviso; la API es la fuente de verdad. */
-  async function processCodiPayment(event) {
+  async function processCodiPayment(event, account) {
     const { transactionId } = event;
     if (!transactionId) return 'missing_transaction_id';
 
-    const tx = await pey.getTransaction(transactionId);
+    const tx = await account.client.getTransaction(transactionId);
     if (tx.status !== 'PAID') {
       throw new Error(`la transacción ${transactionId} está en ${tx.status}, no en PAID`);
     }
@@ -122,6 +153,10 @@ export function createApp({
     if (!charge) {
       log.warn(`[pey] pago de un cobro que no está en la base de datos: ${transactionId}`);
       return 'unknown_charge';
+    }
+    if (!sameAccount(charge, account)) {
+      log.warn(`[pey] el pago ${transactionId} llegó por otra cuenta de pey que la del cobro ${charge.id}: se ignora`);
+      return 'other_account';
     }
 
     const paidCents = toCents(tx.amountBreakdown?.base ?? tx.amount);
@@ -147,11 +182,11 @@ export function createApp({
   }
 
   /** Cambio de estado de una liga de pago (plan B). */
-  async function processLinkUpdate(event) {
+  async function processLinkUpdate(event, account) {
     if (event.status !== 'paid') return `link_${event.status ?? 'unknown'}`;
     if (!event.paymentLinkId) return 'missing_link_id';
 
-    const link = await pey.getPaymentLink(event.paymentLinkId);
+    const link = await account.client.getPaymentLink(event.paymentLinkId);
     if (link.status !== 'paid') {
       throw new Error(`la liga ${event.paymentLinkId} está en ${link.status}, no en paid`);
     }
@@ -162,6 +197,10 @@ export function createApp({
     if (!charge) {
       log.warn(`[pey] liga pagada que no está en la base de datos: ${event.paymentLinkId}`);
       return 'unknown_charge';
+    }
+    if (!sameAccount(charge, account)) {
+      log.warn(`[pey] la liga ${event.paymentLinkId} llegó por otra cuenta de pey que la del cobro ${charge.id}: se ignora`);
+      return 'other_account';
     }
 
     // Lo que cuenta contra el cobro es la base; la propina y la comisión van aparte.

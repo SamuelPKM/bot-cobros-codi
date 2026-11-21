@@ -157,6 +157,23 @@ export const MIGRATIONS = [
       CREATE INDEX charges_by_creator ON charges (created_by, created_at DESC);
     `,
   },
+  {
+    id: 3,
+    name: 'cuenta de pey propia por negocio',
+    sql: `
+      ALTER TABLE merchants ADD COLUMN pey_key_sealed TEXT;
+      ALTER TABLE merchants ADD COLUMN pey_key_last4 TEXT;
+      ALTER TABLE merchants ADD COLUMN pey_webhook_token TEXT UNIQUE;
+      ALTER TABLE merchants ADD COLUMN pey_webhook_secret_sealed TEXT;
+      ALTER TABLE merchants ADD COLUMN pey_connected_at BIGINT;
+      ALTER TABLE merchants ADD COLUMN pey_last_event_at BIGINT;
+
+      -- Con qué API key se creó cada cobro: NULL es la del proyecto. Las
+      -- consultas y los webhooks de un cobro siempre usan esa misma llave.
+      ALTER TABLE charges ADD COLUMN pey_merchant_id INTEGER REFERENCES merchants(id) ON DELETE SET NULL;
+      CREATE INDEX charges_by_pey_account ON charges (pey_merchant_id, status) WHERE pey_merchant_id IS NOT NULL;
+    `,
+  },
 ];
 
 export const TABLES = ['demo_messages', 'demo_sessions', 'rate_limits', 'events', 'charges', 'sessions', 'users', 'merchants'];

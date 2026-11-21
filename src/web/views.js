@@ -178,6 +178,7 @@ function modeBanner(merchant, limits, user) {
   if (merchant.isDemo) {
     return `<p class="alert alert-info">Cuenta de demostración: los cobros son reales y de hasta ${money(limits.maxAmountCents)}. El dinero llega a la cuenta del proyecto.</p>`;
   }
+  if (merchant.peyConnected) return '';
   if (merchant.bankStatus === 'ACTIVE') return '';
   if (merchant.isTrusted) return '';
   const pending = merchant.bankStatus === 'PENDING' || merchant.bankStatus === 'PROCESSING';
@@ -394,6 +395,96 @@ export function chargePage({ user, csrf, charge, creatorName = null, qrDataUrl =
 
 // ------------------------------------------------------------------ ajustes
 
+export const PEY_PORTAL_URL = 'https://portal.mipey.mx';
+
+/**
+ * Asistente para conectar la cuenta de pey propia del negocio.
+ * @param pey { enabled, status: 'none'|'needs_webhook'|'connected', last4, webhookUrl, connectedAt, lastEventAt }
+ */
+function peySection({ user, csrf, pey, values }) {
+  const isAdmin = user.role === 'admin';
+  const portal = `<a href="${PEY_PORTAL_URL}" target="_blank" rel="noopener noreferrer">portal.mipey.mx</a>`;
+  const post = (action, label, cls = 'button button-secondary') =>
+    `<form method="post" action="/panel/ajustes/pey/${action}" class="inline">${csrfField(csrf)}<button class="${cls}" type="submit">${label}</button></form>`;
+  const keyForm = (label) => `<form method="post" action="/panel/ajustes/pey/llave" class="form">
+      ${csrfField(csrf)}
+      <label>API key de pey
+        <input name="llave" type="password" required autocomplete="off" spellcheck="false" placeholder="Pégala aquí">
+        <small>La comprobamos con pey con una consulta que no cobra nada, y la guardamos cifrada. Nadie la vuelve a ver, ni tú.</small>
+      </label>
+      <button class="button" type="submit">${label}</button>
+    </form>`;
+  const urlBox = pey.webhookUrl
+    ? `<div class="copy"><input readonly value="${h(pey.webhookUrl)}" id="pey-webhook-url" aria-label="URL del webhook"><button class="button" type="button" data-copy="#pey-webhook-url">Copiar</button></div>`
+    : '';
+
+  let body;
+  if (!pey.enabled) {
+    body = '<p class="muted">Esta instalación de Cóbrale no permite conectar cuentas propias de pey (falta <code>SECRETS_KEY</code> en el servidor).</p>';
+  } else if (pey.status === 'connected') {
+    body = `<p class="alert alert-ok">Conectada. Los cobros del negocio se crean con tu API key que termina en <strong>${h(pey.last4)}</strong>, y el dinero llega a la cuenta de pago ligada a ella, sin el límite del modo prueba.</p>
+    <dl class="details">
+      <dt>Conectada</dt><dd>${h(formatDateTime(pey.connectedAt))}</dd>
+      <dt>Último aviso de pey</dt><dd>${pey.lastEventAt ? h(formatDateTime(pey.lastEventAt)) : 'Todavía ninguno. Haz un cobro de $0.01 para probar que llegan.'}</dd>
+    </dl>
+    ${
+      isAdmin
+        ? `<h3>URL de tu webhook</h3><p class="muted">Es la que registraste en pey. Si rotas el secreto en el portal, vuelve a pegarlo abajo.</p>${urlBox}
+    <details class="more"><summary>Rotaste el secreto del webhook</summary>
+      <form method="post" action="/panel/ajustes/pey/webhook" class="form">${csrfField(csrf)}
+        <label>Secreto nuevo<input name="secreto" type="password" required autocomplete="off" spellcheck="false" placeholder="whsec_…"></label>
+        <button class="button" type="submit">Guardar secreto</button>
+      </form>
+    </details>
+    <details class="more"><summary>Cambiar de API key</summary>${keyForm('Comprobar y cambiar')}<p class="muted">Al cambiarla, la URL del webhook cambia: tendrás que registrarla otra vez en pey.</p></details>
+    <div class="actions">${post('desconectar', 'Desconectar y volver a la cuenta de Cóbrale')}</div>`
+        : ''
+    }`;
+  } else if (!isAdmin) {
+    body = '<p>El negocio cobra con la cuenta de Cóbrale. Un administrador puede conectar la cuenta de pey propia del negocio.</p>';
+  } else {
+    const keyDone = pey.status === 'needs_webhook';
+    body = `<p>Opcional. Con tu propia cuenta de pey, el dinero de <strong>todos</strong> los cobros del negocio, incluidas las ligas de pago, llega a tu cuenta, sin el límite del modo prueba. pey no permite crear cuentas desde otra app, así que son unos pasos en su portal.</p>
+    <ol class="wizard">
+      <li class="${keyDone ? 'done' : 'current'}">
+        <h3>Crea tu cuenta y tu API key en pey</h3>
+        <ol>
+          <li>Entra a ${portal} y crea tu perfil.</li>
+          <li>En <b>Finanzas</b>, agrega una cuenta de pago <b>CoDi</b> con la CLABE donde quieres recibir. Banxico la valida en hasta 5 días hábiles.</li>
+          <li>En <b>Desarrollador</b>, da clic en <b>Crear API Key</b>, ponle un nombre (por ejemplo “Cóbrale”) y vincúlala a esa cuenta de pago. Copia la llave.</li>
+        </ol>
+      </li>
+      <li class="${keyDone ? 'done' : 'current'}">
+        <h3>Pega tu API key</h3>
+        ${keyDone ? `<p>Guardada y comprobada: termina en <strong>${h(pey.last4)}</strong>.</p>` : keyForm('Comprobar y guardar')}
+      </li>
+      <li class="${keyDone ? 'current' : 'todo'}">
+        <h3>Conecta el aviso de pagos</h3>
+        ${
+          keyDone
+            ? `<ol>
+          <li>En ${portal} &gt; <b>Desarrollador</b>, da clic en el engrane de tu API key.</li>
+          <li>Crea el webhook con esta URL:${urlBox}</li>
+          <li>Copia el secreto que te muestra (empieza con <code>whsec_</code>; solo se ve una vez) y pégalo aquí.</li>
+        </ol>
+        <form method="post" action="/panel/ajustes/pey/webhook" class="form">${csrfField(csrf)}
+          <label>Secreto del webhook<input name="secreto" type="password" required autocomplete="off" spellcheck="false" placeholder="whsec_…"></label>
+          <button class="button" type="submit">Conectar</button>
+        </form>
+        <p class="muted">Hasta este paso, los cobros siguen saliendo por la cuenta de Cóbrale.</p>
+        <div class="actions">${post('desconectar', 'Cancelar y borrar la API key', 'link-button')}</div>`
+            : '<p class="muted">Después de guardar tu API key, aquí aparece la URL que vas a registrar en pey.</p>'
+        }
+      </li>
+    </ol>`;
+  }
+
+  return `<section class="card" id="pey">
+  <h2>Tu propia cuenta de pey</h2>
+  ${body}
+</section>`;
+}
+
 const BANK_STATUS = {
   PENDING: 'En validación con Banxico',
   PROCESSING: 'En validación con Banxico',
@@ -401,9 +492,12 @@ const BANK_STATUS = {
   ERROR: 'Rechazada',
 };
 
-export function settingsPage({ user, merchant, csrf, flash = null, error = null, linkCode = null, whatsappNumber = null, values = {} }) {
+export function settingsPage({ user, merchant, csrf, flash = null, error = null, linkCode = null, whatsappNumber = null, values = {}, pey = null }) {
   const isAdmin = user.role === 'admin';
-  const bankState = merchant.bankAccountId
+  const peyConnected = pey?.status === 'connected' && pey.enabled;
+  const bankState = peyConnected
+    ? '<p>Con tu cuenta de pey conectada, los cobros llegan a la cuenta de pago de tu API key. La CLABE de esta sección solo se usa si la desconectas.</p>'
+    : merchant.bankAccountId
     ? `<p>CLABE terminación <strong>${h(merchant.bankClabeLast4)}</strong> a nombre de ${h(merchant.bankHolder)}: <strong>${h(
         BANK_STATUS[merchant.bankStatus] ?? merchant.bankStatus,
       )}</strong>.</p>
@@ -411,7 +505,7 @@ export function settingsPage({ user, merchant, csrf, flash = null, error = null,
     : `<p>El negocio todavía no registra una CLABE. Mientras tanto está en modo prueba: cobros pequeños que llegan a la cuenta del proyecto.${
         isAdmin ? '' : ' Solo un administrador puede registrarla.'
       }</p>`;
-  const canRegisterBank = isAdmin && (!merchant.bankAccountId || merchant.bankStatus === 'ERROR');
+  const canRegisterBank = !peyConnected && isAdmin && (!merchant.bankAccountId || merchant.bankStatus === 'ERROR');
 
   return layout({
     title: 'Ajustes',
@@ -468,6 +562,8 @@ ${error ? `<p class="alert alert-bad" role="alert">${h(error)}</p>` : ''}
       : `<p><strong>${h(merchant.businessName)}</strong>. Solo un administrador puede cambiar el nombre.</p>`
   }
 </section>
+
+${pey && !merchant.isDemo ? peySection({ user, csrf, pey, values }) : ''}
 
 <section class="card" id="clabe">
   <h2>Cuenta para recibir pagos</h2>

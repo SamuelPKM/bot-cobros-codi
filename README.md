@@ -25,6 +25,7 @@ Requiere Node.js 22.5 o más nuevo. No hay sandbox de pey: se prueba en producci
 - **Bot de WhatsApp**: los mismos cobros desde el chat, más `sí`/`no` para confirmar, `liga` para un push que expiró, `resumen` y `ayuda`. Cada persona liga su número mandando `vincular <código>`, con el código que le da la web; sus cobros quedan a su nombre.
 - **Demo pública** (`/demo`): el chat del bot en una página que cualquiera abre sin invitación, como piden las reglas del hackatón.
 - **Dinero a la cuenta de cada comerciante**: cada uno registra su CLABE. Mientras Banxico la valida (hasta 5 días hábiles), queda en **modo prueba**: cobros de hasta `DEMO_MAX_AMOUNT` que llegan a la cuenta del proyecto.
+- **Cuenta de pey propia (opcional)**: un asistente en Ajustes guía al administrador para crear su cuenta y su API key en el portal de pey (pey no tiene API para eso), la comprueba y la guarda cifrada. Después registra en pey una URL de webhook que es solo de su negocio. Desde entonces todos sus cobros, incluidas las ligas, se crean con su API key y el dinero llega a su cuenta. Necesita `SECRETS_KEY`.
 
 ## Arquitectura en corto
 
@@ -61,6 +62,7 @@ Sin `DATABASE_URL`, Cóbrale usa PGlite (Postgres dentro de Node) y guarda en `d
 | `DEMO_MAX_AMOUNT` | Monto máximo por cobro en modo prueba (demo y cuentas sin CLABE activa). Por defecto `1` |
 | `DEMO_MERCHANT_NAME` | Nombre del negocio en la demo. Por defecto `Negocio de prueba` |
 | `DEMO_ACCOUNT_EMAIL`, `DEMO_ACCOUNT_PASSWORD` | Cuenta de la web para el jurado, siempre en modo prueba. Se crea al arrancar |
+| `SECRETS_KEY` | Llave (32 caracteres o más) para cifrar las API keys de pey que conectan los negocios. Sin ella, el asistente de cuenta propia queda desactivado. En Render se genera sola |
 | `TRUSTED_EMAILS` | Correos, separados por coma, que cobran sin límite aunque no tengan CLABE (por ejemplo, la cuenta del equipo) |
 | `REGISTRATION_OPEN` | `false` cierra el registro de cuentas nuevas |
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` | WhatsApp Cloud API. Opcionales en conjunto |
