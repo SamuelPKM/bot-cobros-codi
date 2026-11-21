@@ -10,4 +10,9 @@ export function apiUrl(): string {
   return value;
 }
 
+/** Mismo valor que FRONT_PROXY_SECRET de la API; opcional (sin él no se manda la IP). */
+export function frontProxySecret(): string | undefined {
+  return process.env.FRONT_PROXY_SECRET?.trim() || undefined;
+}
+
 export const isProduction = process.env.NODE_ENV === 'production';

@@ -31,8 +31,8 @@ El código de Express (`src/`, `test/`, `scripts/`) se retiró en esta rama y si
 | F0 | Monorepo: `backend/` con el historial de cobrale-api; se retira Express | ✅ |
 | F1 | Backend: liga de pago, invitaciones con liga de un solo uso, cambio de rol (sin dejar el negocio sin admin), resumen del día por persona y CSV | ✅ |
 | F2 | Backend: motor de conversación (cobra, sí/no, qr, liga, resumen, ayuda) ✅, WhatsApp (webhook de Meta, vincular número, QR como imagen, "✅ Pagado") ✅ y demo pública con límites ✅ | ✅ |
-| F3 | `front/web` Next.js: entrar con sesión en cookie httpOnly, registro con API key, panel (resumen del día y cobros), nuevo cobro (push, QR, liga), detalle con plan B y "Pagado" en vivo, ajustes (negocio, API key, webhook, WhatsApp), equipo (alta, edición, invitaciones) y aceptar invitación ✅; faltan demo y páginas de regreso de la liga | ⏳ |
-| F4 | **IP real del visitante en la API** (hoy todo llega desde el servidor de Next y los límites por IP serían globales: Next manda la IP del cliente firmada con un secreto compartido y la API solo la acepta con esa firma), deploy (Render + Neon + front/web), documentos de entrega al día y pull request | ⏳ |
+| F3 | `front/web` Next.js: entrar con sesión en cookie httpOnly, registro con API key, panel (resumen del día y cobros), nuevo cobro (push, QR, liga), detalle con plan B y "Pagado" en vivo, ajustes (negocio, API key, webhook, WhatsApp), equipo (alta, edición, invitaciones) aceptar invitación, demo pública (chat con "Pagado" en vivo) y páginas de regreso de la liga ✅ | ✅ |
+| F4 | IP real del visitante en la API ✅ (FRONT_PROXY_SECRET), deploy (Render + Neon + front/web), documentos de entrega al día y pull request | ⏳ |
 
 ## Regla: nada de front en Nest
 

@@ -33,7 +33,8 @@ Las pruebas van junto al archivo que prueban (`*.test.ts(x)`); las de varias Ser
 
 1. **Entrar** es una Server Action: valida el formulario, llama a `POST /auth/login` y guarda el JWT en la cookie `cobrale_session` (httpOnly, `SameSite=Lax`, `Secure` en producción) con la misma vigencia que el token.
 2. Las páginas privadas leen a la persona con `getCurrentUser()` (llama a `GET /me`) **dentro de un `<Suspense>`**, como pide Cache Components. Sin sesión válida, a `/entrar`.
-3. El JavaScript del navegador nunca ve el token: toda llamada a la API sale del servidor de Next (`shared/api/server-api.ts`, marcado `server-only`).
+3. **IP del visitante:** con `FRONT_PROXY_SECRET` (el mismo que la API), cada llamada manda la IP del visitante (la última de `X-Forwarded-For`) firmada con ese secreto; sin él, los límites por IP de la API serían uno solo para todos.
+4. El JavaScript del navegador nunca ve el token: toda llamada a la API sale del servidor de Next (`shared/api/server-api.ts`, marcado `server-only`).
 
 ## Estructura
 
@@ -42,7 +43,8 @@ Como en el backend: primero por **dominio**, luego por **función**. `app/` solo
 ```
 src/
 ├─ app/                    # rutas: page.tsx, layout.tsx (delgadas; usan features/)
-│  ├─ entrar/  registro/  invitacion/[token]/
+│  ├─ entrar/  registro/  invitacion/[token]/  demo/  pago/{gracias,cancelado}/
+│  ├─ api/demo/            # Route Handlers de la demo (puente a la API con la cookie de la sesión)
 │  └─ panel/               # layout con la barra; cobros/nuevo, cobros/[id], equipo, ajustes
 ├─ features/               # un dominio por carpeta
 │  ├─ auth/
@@ -60,7 +62,8 @@ src/
 │  │  ├─ components/       # NewChargeForm, ChargesTable, ChargeDetail, ChargeStatusPoller…
 │  │  ├─ services/         # server-only: listCharges, getCharge; QR a PNG
 │  │  └─ policies/  interfaces/  types/
-│  └─ reports/             # resumen de hoy
+│  ├─ reports/             # resumen de hoy
+│  └─ demo/                # chat público: sesión en cookie httpOnly, QR dibujado en el servidor, polling cada 3 s
 └─ shared/                 # solo lo que no pertenece a un dominio
    ├─ api/                 # cliente JSON de la API y su versión server-only
    ├─ config/              # variables del servidor

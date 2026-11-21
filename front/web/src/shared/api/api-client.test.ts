@@ -25,6 +25,24 @@ describe('createApiClient', () => {
     expect(new Headers(init.headers).get('content-type')).toBe('application/json');
   });
 
+  it('agrega los headers fijos del cliente (IP del visitante y secreto del proxy)', async () => {
+    const fetch = vi.fn().mockResolvedValue(json(200, {}));
+    await createApiClient({
+      baseUrl: 'https://api.test',
+      fetch,
+      headers: { 'x-cobrale-client-ip': '203.0.113.9' },
+    }).request('/demo');
+    expect(new Headers(fetch.mock.calls[0][1].headers).get('x-cobrale-client-ip')).toBe('203.0.113.9');
+  });
+
+  it('y los headers de una sola llamada', async () => {
+    const fetch = vi.fn().mockResolvedValue(json(200, {}));
+    await createApiClient({ baseUrl: 'https://api.test', fetch }).request('/demo/messages', {
+      headers: { 'x-demo-session': 'abc' },
+    });
+    expect(new Headers(fetch.mock.calls[0][1].headers).get('x-demo-session')).toBe('abc');
+  });
+
   it('sin token no manda Authorization; GET sin cuerpo', async () => {
     const fetch = vi.fn().mockResolvedValue(json(200, []));
     await createApiClient({ baseUrl: 'https://api.test', fetch }).request('/demo');

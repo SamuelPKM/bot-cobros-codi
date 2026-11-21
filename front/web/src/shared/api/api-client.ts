@@ -14,22 +14,26 @@ export interface ApiRequestOptions {
   body?: unknown;
   /** Bearer token de la sesión. */
   token?: string;
+  /** Headers solo de esta llamada (p. ej. X-Demo-Session). */
+  headers?: Record<string, string>;
 }
 
 export interface ApiClientOptions {
   baseUrl: string;
   fetch: typeof globalThis.fetch;
+  /** Headers fijos en cada llamada (IP del visitante y secreto del proxy). */
+  headers?: Record<string, string>;
 }
 
 const UNREACHABLE =
   'No pudimos conectar con el servidor. Revisa tu conexión e intenta de nuevo.';
 
 /** Cliente JSON de la API de Nest. Solo se usa del lado del servidor (ver server-api.ts). */
-export function createApiClient({ baseUrl, fetch }: ApiClientOptions) {
+export function createApiClient({ baseUrl, fetch, headers: fixed = {} }: ApiClientOptions) {
   const root = baseUrl.replace(/\/+$/, '');
 
   async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-    const headers = new Headers({ accept: 'application/json' });
+    const headers = new Headers({ ...fixed, ...options.headers, accept: 'application/json' });
     if (options.body !== undefined) headers.set('content-type', 'application/json');
     if (options.token) headers.set('authorization', `Bearer ${options.token}`);
 
