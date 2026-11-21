@@ -191,7 +191,7 @@ describe('Seguridad: autenticación y roles (e2e)', () => {
         .expect(409);
     });
 
-    it('lista vendedores y los desactiva o cambia su tope', async () => {
+    it('lista al equipo y desactiva a un vendedor o cambia su tope', async () => {
       const token = await login('dueno', 'admin-12345');
       const list = await http
         .get('/users')
@@ -199,8 +199,8 @@ describe('Seguridad: autenticación y roles (e2e)', () => {
         .expect(200);
       expect(
         list.body.users.map((u: { username: string }) => u.username),
-      ).toEqual(['ana']);
-      const id = list.body.users[0].id as number;
+      ).toEqual(['dueno', 'ana']);
+      const id = list.body.users[1].id as number;
       const res = await http
         .patch(`/users/${id}`)
         .set('Authorization', `Bearer ${token}`)
@@ -209,16 +209,10 @@ describe('Seguridad: autenticación y roles (e2e)', () => {
       expect(res.body.user).toMatchObject({ active: false, maxAmount: 100 });
     });
 
-    it('responde 404 al editar un usuario inexistente o un admin', async () => {
+    it('responde 404 al editar un usuario inexistente', async () => {
       const token = await login('dueno', 'admin-12345');
-      const admin = await users.findByUsername('dueno');
       await http
         .patch('/users/99999')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ active: false })
-        .expect(404);
-      await http
-        .patch(`/users/${admin!.id}`)
         .set('Authorization', `Bearer ${token}`)
         .send({ active: false })
         .expect(404);

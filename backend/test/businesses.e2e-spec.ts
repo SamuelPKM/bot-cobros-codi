@@ -301,13 +301,17 @@ describe('Negocios con su propia API key de pey (e2e)', () => {
         .get('/users')
         .set('Authorization', `Bearer ${leoAdmin}`)
         .expect(200);
-      expect(leoTeam.body.users).toEqual([]);
+      // Su equipo es solo él: no ve a nadie del negocio de Ana.
+      expect(
+        leoTeam.body.users.map((u: { username: string }) => u.username),
+      ).toEqual(['leo']);
       const sellerId = (
         await http
           .get('/users')
           .set('Authorization', `Bearer ${anaAdmin}`)
           .expect(200)
-      ).body.users[0].id as number;
+      ).body.users.find((u: { role: string }) => u.role === 'seller')
+        .id as number;
       await http
         .patch(`/users/${sellerId}`)
         .set('Authorization', `Bearer ${leoAdmin}`)

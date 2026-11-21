@@ -14,6 +14,7 @@ export interface CreateUserInput {
 /** Campos editables de un usuario. `undefined` = no cambiar. */
 export interface UpdateUserInput {
   name?: string;
+  role?: Role;
   active?: boolean;
   maxAmountCents?: number | null;
   password?: string;

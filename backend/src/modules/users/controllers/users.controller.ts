@@ -19,19 +19,17 @@ import type { PublicUser } from '../interfaces/public-user.interface';
 import { toPublicUser } from '../mappers/user.mapper';
 import { UsersService } from '../services/users.service';
 
-/** Vendedores del negocio del admin. Todo el controlador es solo para el admin. */
+/** El equipo del negocio del admin. Todo el controlador es solo para el admin. */
 @Roles('admin')
 @Controller('users')
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
+  /** Todo el equipo (admins y vendedores), en orden de alta. */
   @Get()
   async list(@CurrentUser() admin: User): Promise<{ users: PublicUser[] }> {
-    const sellers = await this.users.list({
-      businessId: admin.businessId,
-      role: 'seller',
-    });
-    return { users: sellers.map(toPublicUser) };
+    const team = await this.users.list({ businessId: admin.businessId });
+    return { users: team.map(toPublicUser) };
   }
 
   @Post()
@@ -58,12 +56,10 @@ export class UsersController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateSellerDto,
   ): Promise<{ user: PublicUser }> {
-    // Un vendedor de otro negocio responde igual que uno inexistente.
-    const target = await this.users.findInBusiness(id, admin.businessId);
-    if (!target || target.role !== 'seller')
-      throw new NotFoundException('No existe ese vendedor');
-    const user = await this.users.update(id, {
+    // Alguien de otro negocio responde 404, igual que alguien inexistente.
+    const user = await this.users.updateInBusiness(admin.businessId, id, {
       name: dto.name,
+      role: dto.role,
       active: dto.active,
       password: dto.password,
       maxAmountCents:

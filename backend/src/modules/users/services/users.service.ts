@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { hashPassword } from '../../../shared/security/password';
@@ -80,15 +84,61 @@ export class UsersService {
   }
 
   async update(id: number, input: UpdateUserInput): Promise<User> {
+    const changes = await this.changesFor(input);
+    if (Object.keys(changes).length > 0)
+      await this.repo.update({ id }, changes);
+    return (await this.findById(id))!;
+  }
+
+  /**
+   * Edita a una persona del negocio sin dejarlo nunca sin un admin activo.
+   * Bloquea las filas de los admins activos antes de contarlos: si dos admins
+   * se quitan el rol a la vez, el segundo espera y ve el resultado del primero.
+   */
+  async updateInBusiness(
+    businessId: number,
+    id: number,
+    input: UpdateUserInput,
+  ): Promise<User> {
+    const changes = await this.changesFor(input);
+    return this.repo.manager.transaction(async (manager) => {
+      const activeAdmins = (await manager.query(
+        `SELECT id FROM users WHERE business_id = $1 AND role = 'admin' AND active FOR UPDATE`,
+        [businessId],
+      )) as { id: number }[];
+
+      const target = await manager.findOneBy(User, { id, businessId });
+      if (!target)
+        throw new NotFoundException('No existe esa persona en tu negocio');
+
+      const stopsBeingActiveAdmin =
+        target.role === 'admin' &&
+        target.active &&
+        (input.role === 'seller' || input.active === false);
+      if (
+        stopsBeingActiveAdmin &&
+        !activeAdmins.some((a) => a.id !== target.id)
+      ) {
+        throw new ConflictException(
+          'El negocio necesita al menos un administrador activo',
+        );
+      }
+
+      if (Object.keys(changes).length > 0)
+        await manager.update(User, { id }, changes);
+      return (await manager.findOneBy(User, { id }))!;
+    });
+  }
+
+  private async changesFor(input: UpdateUserInput): Promise<Partial<User>> {
     const changes: Partial<User> = {};
     if (input.name !== undefined) changes.name = input.name.trim();
+    if (input.role !== undefined) changes.role = input.role;
     if (input.active !== undefined) changes.active = input.active;
     if (input.maxAmountCents !== undefined)
       changes.maxAmountCents = input.maxAmountCents;
     if (input.password !== undefined)
       changes.passwordHash = await hashPassword(input.password);
-    if (Object.keys(changes).length > 0)
-      await this.repo.update({ id }, changes);
-    return (await this.findById(id))!;
+    return changes;
   }
 }

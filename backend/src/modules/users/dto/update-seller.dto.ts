@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsIn,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -17,14 +18,20 @@ import {
   PASSWORD_MIN,
   POSITIVE_AMOUNT_MESSAGE,
 } from './seller-validation.constants';
+import { ROLE_VALUES, type Role } from '../types/role.type';
 
-/** Todos los campos son opcionales; solo cambia lo que viene. */
+/** Edición de una persona del equipo. Todos opcionales; solo cambia lo que viene. */
 export class UpdateSellerDto {
   @IsOptional()
   @IsString()
   @Length(1, 80, { message: NAME_MESSAGE })
   @Matches(/\S/, { message: NAME_MESSAGE })
   name?: string;
+
+  /** Hacer admin a un vendedor o al revés (sin dejar el negocio sin admin activo). */
+  @IsOptional()
+  @IsIn(ROLE_VALUES, { message: 'El rol debe ser admin o seller' })
+  role?: Role;
 
   @IsOptional()
   @IsBoolean()
