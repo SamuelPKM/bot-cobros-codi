@@ -6,15 +6,21 @@ import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
 import { typeOrmOptions } from '../../src/database/data-source';
 import { configureApp } from '../../src/main';
+import { BusinessesService } from '../../src/modules/businesses/services/businesses.service';
 import { ExpoPushClient } from '../../src/modules/notifications/services/expo-push-client.service';
-import { PeyClient } from '../../src/modules/pey/services/pey-client.service';
+import { PeyClientFactory } from '../../src/modules/pey/services/pey-client.factory';
+import { UsersService } from '../../src/modules/users/services/users.service';
+import type { Role } from '../../src/modules/users/types/role.type';
 import { FakeExpoPushClient } from '../fakes/fake-expo-push-client';
-import { FakePeyClient } from '../fakes/fake-pey-client';
+import type { FakePeyClient } from '../fakes/fake-pey-client';
+import { FakePeyClientFactory } from '../fakes/fake-pey-client-factory';
 
 export interface TestApp {
   app: INestApplication;
-  /** pey simulado: ninguna prueba e2e llama a la API real. */
+  /** pey simulado que comparten todos los negocios: ninguna prueba llama a la API real. */
   pey: FakePeyClient;
+  /** Registra la API key de cada llamada a pey. */
+  peyFactory: FakePeyClientFactory;
   /** Expo Push simulado. */
   expo: FakeExpoPushClient;
 }
@@ -35,23 +41,23 @@ export async function createTestApp(): Promise<TestApp> {
   await migrator.runMigrations();
   await migrator.destroy();
 
-  const pey = new FakePeyClient();
+  const peyFactory = new FakePeyClientFactory();
   const expo = new FakeExpoPushClient();
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
-    .overrideProvider(PeyClient)
-    .useValue(pey)
+    .overrideProvider(PeyClientFactory)
+    .useValue(peyFactory)
     .overrideProvider(ExpoPushClient)
     .useValue(expo)
     .compile();
   const app = moduleRef.createNestApplication({ rawBody: true });
   configureApp(app);
   await app.init();
-  return { app, pey, expo };
+  return { app, pey: peyFactory.client, peyFactory, expo };
 }
 
-/** Olvida los intentos contados por el límite de login (cada prueba empieza de cero). */
+/** Olvida los intentos contados por los límites (cada prueba empieza de cero). */
 export function resetThrottling(app: INestApplication): void {
   app.get<ThrottlerStorageService>(ThrottlerStorage).storage.clear();
 }
@@ -64,6 +70,73 @@ export async function resetDatabase(app: INestApplication): Promise<void> {
     .join(', ');
   if (tables)
     await dataSource.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+}
+
+export const TEST_WEBHOOK_SECRET = process.env.TEST_WEBHOOK_SECRET!;
+
+export interface SeededBusiness {
+  id: number;
+  name: string;
+  webhookSlug: string;
+  apiKey: string;
+}
+
+/**
+ * Registra un negocio con su admin (como POST /businesses) y le configura el
+ * secreto de webhook de pruebas.
+ */
+export async function seedBusiness(
+  app: INestApplication,
+  options: {
+    name?: string;
+    adminUsername?: string;
+    adminPassword?: string;
+    apiKey?: string;
+    webhookSecret?: string | null;
+  } = {},
+): Promise<SeededBusiness> {
+  const name = options.name ?? 'Tacos Ana';
+  const adminUsername = options.adminUsername ?? 'dueno';
+  const adminPassword = options.adminPassword ?? 'admin-12345';
+  const apiKey = options.apiKey ?? `pey_key_${adminUsername}`;
+  const webhookSecret =
+    options.webhookSecret === undefined
+      ? TEST_WEBHOOK_SECRET
+      : options.webhookSecret;
+  const businesses = app.get(BusinessesService);
+  const { business } = await businesses.register({
+    businessName: name,
+    adminName: 'Dueño',
+    username: adminUsername,
+    password: adminPassword,
+    peyApiKey: apiKey,
+  });
+  if (webhookSecret)
+    await businesses.update(business.id, { peyWebhookSecret: webhookSecret });
+  return { id: business.id, name, webhookSlug: business.webhookSlug, apiKey };
+}
+
+/** Crea una persona del negocio directamente (sin pasar por HTTP). */
+export function seedUser(
+  app: INestApplication,
+  businessId: number,
+  {
+    username,
+    password,
+    role = 'seller',
+    name = username,
+    maxAmountCents = null,
+  }: {
+    username: string;
+    password: string;
+    role?: Role;
+    name?: string;
+    maxAmountCents?: number | null;
+  },
+) {
+  return app
+    .get(UsersService)
+    .create({ businessId, username, password, role, name, maxAmountCents });
 }
 
 /** Inicia sesión y devuelve el Bearer token. */

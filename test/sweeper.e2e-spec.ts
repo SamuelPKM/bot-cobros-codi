@@ -4,7 +4,6 @@ import { DataSource } from 'typeorm';
 import type { PublicCharge } from '../src/modules/charges/interfaces/public-charge.interface';
 import { PeyError } from '../src/modules/pey/errors/pey.error';
 import { SweeperService } from '../src/modules/sweeper/services/sweeper.service';
-import { UsersService } from '../src/modules/users/services/users.service';
 import { FakeExpoPushClient } from './fakes/fake-expo-push-client';
 import { FakePeyClient } from './fakes/fake-pey-client';
 import {
@@ -12,6 +11,8 @@ import {
   loginAs,
   resetDatabase,
   resetThrottling,
+  seedBusiness,
+  seedUser,
 } from './utils/test-app';
 
 describe('Barrido: vencer, conciliar con pey y reintentar avisos (e2e)', () => {
@@ -39,10 +40,10 @@ describe('Barrido: vencer, conciliar con pey y reintentar avisos (e2e)', () => {
     await resetDatabase(app);
     pey.reset();
     expo.reset();
-    await app.get(UsersService).create({
+    const business = await seedBusiness(app);
+    await seedUser(app, business.id, {
       username: 'ana',
       name: 'Ana',
-      role: 'seller',
       password: 'ana-12345',
     });
     ana = await loginAs(app, 'ana', 'ana-12345');

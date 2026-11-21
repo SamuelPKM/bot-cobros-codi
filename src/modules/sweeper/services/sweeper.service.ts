@@ -4,8 +4,8 @@ import type { DueAttempt } from '../../charges/interfaces/charge-expiry.interfac
 import { paymentFromTransaction } from '../../charges/mappers/pey-payment.mapper';
 import { ChargeLifecycleService } from '../../charges/services/charge-lifecycle.service';
 import { ChargePaymentsService } from '../../charges/services/charge-payments.service';
+import { BusinessesService } from '../../businesses/services/businesses.service';
 import type { PeyTransaction } from '../../pey/interfaces/pey-codi.interface';
-import { PeyClient } from '../../pey/services/pey-client.service';
 import { PaymentNotifier } from '../../notifications/services/payment-notifier.service';
 import { SWEEP_LOCK_KEY } from '../constants/sweeper.constants';
 
@@ -24,7 +24,7 @@ export class SweeperService {
 
   constructor(
     private readonly dataSource: DataSource,
-    private readonly pey: PeyClient,
+    private readonly businesses: BusinessesService,
     private readonly lifecycle: ChargeLifecycleService,
     private readonly payments: ChargePaymentsService,
     private readonly notifier: PaymentNotifier,
@@ -61,7 +61,10 @@ export class SweeperService {
       const tx = await this.findPayment(attempt);
       if (tx) {
         const { result } = await this.payments.recordPayment(
-          paymentFromTransaction(tx, attempt.kind, { qrId: attempt.qrId }),
+          paymentFromTransaction(tx, attempt.kind, {
+            businessId: attempt.businessId,
+            qrId: attempt.qrId,
+          }),
         );
         this.logger.log(
           `intento ${attempt.attemptId}: pago encontrado al vencer -> ${result}`,
@@ -77,18 +80,23 @@ export class SweeperService {
   }
 
   /**
-   * Pago de un intento según pey, o null. Un push en duda sin transactionId no
-   * se puede consultar: se vence, y si luego llega el webhook se liga por chargeId.
+   * Pago de un intento según pey (con la API key de su negocio), o null. Un
+   * push en duda sin transactionId no se puede consultar: se vence, y si luego
+   * llega el webhook se liga por chargeId.
    */
   private async findPayment(
     attempt: DueAttempt,
   ): Promise<PeyTransaction | null> {
+    if (!(attempt.kind === 'qr' && attempt.qrId) && !attempt.transactionId) {
+      return null;
+    }
+    const pey = await this.businesses.peyFor(attempt.businessId);
     if (attempt.kind === 'qr' && attempt.qrId) {
-      const payments = await this.pey.listQrTransactions(attempt.qrId);
+      const payments = await pey.listQrTransactions(attempt.qrId);
       return payments.find((tx) => tx.status === 'PAID') ?? null;
     }
     if (attempt.transactionId) {
-      const tx = await this.pey.getTransaction(attempt.transactionId);
+      const tx = await pey.getTransaction(attempt.transactionId);
       return tx.status === 'PAID' ? tx : null;
     }
     return null;

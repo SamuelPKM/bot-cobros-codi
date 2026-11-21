@@ -22,8 +22,13 @@ function signed(
   };
 }
 
+/** Cada negocio tiene su propio secreto: se verifica con el del negocio de la URL. */
 describe('PeyWebhookVerifier', () => {
-  const verifier = new PeyWebhookVerifier(SECRET);
+  const base = new PeyWebhookVerifier();
+  const verifier = {
+    verify: (body: Buffer | undefined, headers: Record<string, string>) =>
+      base.verify(SECRET, body, headers),
+  };
   const event = { type: 'codi.pn.payment_received', transactionId: 'TX1' };
 
   it('devuelve el evento y su webhook-id cuando la firma es válida', () => {
@@ -62,8 +67,8 @@ describe('PeyWebhookVerifier', () => {
 
   it('responde 503 mientras no esté configurado el secreto (pey reintentará)', () => {
     const { body, headers } = signed(event);
-    expect(() =>
-      new PeyWebhookVerifier(undefined).verify(body, headers),
-    ).toThrow(ServiceUnavailableException);
+    expect(() => new PeyWebhookVerifier().verify(null, body, headers)).toThrow(
+      ServiceUnavailableException,
+    );
   });
 });

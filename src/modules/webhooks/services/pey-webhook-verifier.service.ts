@@ -14,19 +14,19 @@ type Headers = Record<string, string | string[] | undefined>;
  * Verifica la firma Standard Webhooks de pey sobre el cuerpo CRUDO (los bytes
  * exactos que llegaron), nunca sobre el JSON re-serializado. También rechaza
  * entregas con un timestamp de más de 5 minutos (anti-replay).
+ *
+ * Cada negocio tiene su propia API key y, por lo tanto, su propio secreto: se
+ * verifica con el del negocio al que va dirigido el webhook.
  */
 export class PeyWebhookVerifier {
-  private readonly webhook: Webhook | null;
-
-  /** Sin secreto el servidor arranca igual (el secreto existe solo después de registrar la URL en pey). */
-  constructor(secret: string | undefined) {
-    this.webhook = secret ? new Webhook(secret) : null;
-  }
-
-  verify(rawBody: Buffer | undefined, headers: Headers): VerifiedWebhook {
-    if (!this.webhook) {
+  verify(
+    secret: string | null,
+    rawBody: Buffer | undefined,
+    headers: Headers,
+  ): VerifiedWebhook {
+    if (!secret) {
       throw new ServiceUnavailableException(
-        'Webhook de pey sin configurar (falta PEY_WEBHOOK_SECRET)',
+        'Este negocio aún no registra el secreto de su webhook de pey',
       );
     }
     const id = headers['webhook-id'];
@@ -34,7 +34,7 @@ export class PeyWebhookVerifier {
       throw new UnauthorizedException('Firma inválida');
 
     try {
-      const event = this.webhook.verify(rawBody.toString('utf8'), {
+      const event = new Webhook(secret).verify(rawBody.toString('utf8'), {
         'webhook-id': id,
         'webhook-timestamp': String(headers['webhook-timestamp'] ?? ''),
         'webhook-signature': String(headers['webhook-signature'] ?? ''),

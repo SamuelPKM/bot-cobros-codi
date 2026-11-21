@@ -1,31 +1,53 @@
 import { validateEnv } from './env.validation';
 
+const ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
+
 const base = {
   DATABASE_URL: 'postgres://cobrale:cobrale@localhost:5433/cobrale',
   AUTH_SECRET: 'x'.repeat(32),
-  PEY_API_KEY: 'pey_key',
+  ENCRYPTION_KEY,
 };
 
 describe('validateEnv', () => {
   it('acepta la configuración mínima y aplica valores por defecto', () => {
-    const env = validateEnv(base);
-    expect(env).toEqual({
+    expect(validateEnv(base)).toEqual({
       DATABASE_URL: base.DATABASE_URL,
       DATABASE_SSL: false,
       AUTH_SECRET: base.AUTH_SECRET,
-      PEY_API_KEY: 'pey_key',
+      ENCRYPTION_KEY,
+      PUBLIC_BASE_URL: undefined,
       PEY_BASE_URL: 'https://api.pey.mx',
-      PEY_WEBHOOK_SECRET: undefined,
       PORT: 3000,
       JWT_TTL: '12h',
-      ADMIN_USERNAME: undefined,
-      ADMIN_PASSWORD: undefined,
-      BUSINESS_NAME: 'Cóbrale',
       EXPO_ACCESS_TOKEN: undefined,
       SWEEPER_ENABLED: true,
       TRUST_PROXY: false,
       CORS_ORIGINS: [],
     });
+  });
+
+  it('ya no pide credenciales de pey: cada negocio registra su propia API key', () => {
+    const env = validateEnv(base) as unknown as Record<string, unknown>;
+    expect(env).not.toHaveProperty('PEY_API_KEY');
+    expect(env).not.toHaveProperty('PEY_WEBHOOK_SECRET');
+  });
+
+  it('exige una ENCRYPTION_KEY de 32 bytes en base64 para cifrar las API keys', () => {
+    expect(() => validateEnv({ ...base, ENCRYPTION_KEY: 'corta' })).toThrow(
+      'ENCRYPTION_KEY',
+    );
+  });
+
+  it('acepta PUBLIC_BASE_URL https sin "/" final, para armar la URL del webhook', () => {
+    expect(
+      validateEnv({
+        ...base,
+        PUBLIC_BASE_URL: 'https://cobrale-api.onrender.com/',
+      }).PUBLIC_BASE_URL,
+    ).toBe('https://cobrale-api.onrender.com');
+    expect(() =>
+      validateEnv({ ...base, PUBLIC_BASE_URL: 'http://inseguro.com' }),
+    ).toThrow('PUBLIC_BASE_URL');
   });
 
   it('lee TRUST_PROXY y la lista de orígenes permitidos para CORS', () => {
@@ -64,64 +86,20 @@ describe('validateEnv', () => {
     expect(env.EXPO_ACCESS_TOKEN).toBe('expo-token');
   });
 
-  it('usa BUSINESS_NAME, el nombre que ve quien paga en su banco', () => {
-    expect(
-      validateEnv({ ...base, BUSINESS_NAME: 'Tacos Ana' }).BUSINESS_NAME,
-    ).toBe('Tacos Ana');
-  });
-
-  it('exige un BUSINESS_NAME de máximo 30 caracteres', () => {
-    expect(() =>
-      validateEnv({ ...base, BUSINESS_NAME: 'x'.repeat(31) }),
-    ).toThrow('BUSINESS_NAME');
-  });
-
-  it('acepta el admin inicial cuando vienen usuario y contraseña juntos', () => {
-    const env = validateEnv({
-      ...base,
-      ADMIN_USERNAME: 'dueno',
-      ADMIN_PASSWORD: 'admin-12345',
-      JWT_TTL: '8h',
-    });
-    expect(env).toMatchObject({
-      ADMIN_USERNAME: 'dueno',
-      ADMIN_PASSWORD: 'admin-12345',
-      JWT_TTL: '8h',
-    });
-  });
-
-  it('exige usuario y contraseña del admin inicial juntos, con contraseña de 8+', () => {
-    expect(() => validateEnv({ ...base, ADMIN_USERNAME: 'dueno' })).toThrow(
-      'ADMIN_PASSWORD',
-    );
-    expect(() =>
-      validateEnv({
-        ...base,
-        ADMIN_USERNAME: 'dueno',
-        ADMIN_PASSWORD: 'corta',
-      }),
-    ).toThrow('ADMIN_PASSWORD');
-  });
-
   it('exige un JWT_TTL con formato como 15m, 12h o 1d', () => {
+    expect(validateEnv({ ...base, JWT_TTL: '8h' }).JWT_TTL).toBe('8h');
     expect(() => validateEnv({ ...base, JWT_TTL: 'siempre' })).toThrow(
       'JWT_TTL',
     );
   });
 
   it('activa SSL para Neon y lee el puerto como número', () => {
-    const env = validateEnv({
-      ...base,
-      DATABASE_SSL: 'true',
-      PORT: '8080',
-      PEY_WEBHOOK_SECRET: 'whsec_abc',
-    });
+    const env = validateEnv({ ...base, DATABASE_SSL: 'true', PORT: '8080' });
     expect(env.DATABASE_SSL).toBe(true);
     expect(env.PORT).toBe(8080);
-    expect(env.PEY_WEBHOOK_SECRET).toBe('whsec_abc');
   });
 
-  it.each(['DATABASE_URL', 'AUTH_SECRET', 'PEY_API_KEY'])(
+  it.each(['DATABASE_URL', 'AUTH_SECRET', 'ENCRYPTION_KEY'])(
     'falla si falta %s',
     (name) => {
       const env: Record<string, string> = { ...base };
@@ -142,15 +120,9 @@ describe('validateEnv', () => {
     );
   });
 
-  it('exige que el secreto del webhook empiece con whsec_', () => {
-    expect(() => validateEnv({ ...base, PEY_WEBHOOK_SECRET: 'otro' })).toThrow(
-      'PEY_WEBHOOK_SECRET',
-    );
-  });
-
   it('reporta todos los errores juntos', () => {
     expect(() => validateEnv({})).toThrow(
-      /DATABASE_URL[\s\S]*AUTH_SECRET[\s\S]*PEY_API_KEY/,
+      /DATABASE_URL[\s\S]*AUTH_SECRET[\s\S]*ENCRYPTION_KEY/,
     );
   });
 });

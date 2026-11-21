@@ -82,20 +82,27 @@ export class ChargePaymentsService {
     manager: EntityManager,
     input: RecordPaymentInput,
   ): Promise<PaymentAttempt | null> {
-    const byTransaction = await manager.findOneBy(PaymentAttempt, {
-      transactionId: input.transactionId,
+    // Cada búsqueda se limita a cobros del negocio que confirmó el pago.
+    const ofBusiness = { charge: { businessId: input.businessId } };
+    const byTransaction = await manager.findOne(PaymentAttempt, {
+      where: { transactionId: input.transactionId, ...ofBusiness },
+      relations: { charge: true },
     });
     if (byTransaction) return byTransaction;
 
     if (input.qrId) {
-      const byQr = await manager.findOneBy(PaymentAttempt, {
-        qrId: input.qrId,
+      const byQr = await manager.findOne(PaymentAttempt, {
+        where: { qrId: input.qrId, ...ofBusiness },
+        relations: { charge: true },
       });
       if (byQr) return byQr;
     }
 
     if (input.chargeId === undefined) return null;
-    const charge = await manager.findOneBy(Charge, { id: input.chargeId });
+    const charge = await manager.findOneBy(Charge, {
+      id: input.chargeId,
+      businessId: input.businessId,
+    });
     if (!charge) return null;
 
     const unclaimed = await manager.findOne(PaymentAttempt, {

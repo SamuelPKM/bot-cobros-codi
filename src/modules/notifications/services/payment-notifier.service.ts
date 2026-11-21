@@ -41,7 +41,7 @@ export class PaymentNotifier {
   }
 
   private async send(notice: PaidChargeNotice): Promise<void> {
-    const recipients = await this.recipients(notice.sellerId);
+    const recipients = await this.recipients(notice);
     const devices = await this.tokens.tokensFor(recipients);
     const message = paymentNotification(notice);
 
@@ -57,10 +57,14 @@ export class PaymentNotifier {
     await this.lifecycle.markNotified(notice.chargeId);
   }
 
-  private async recipients(sellerId: number): Promise<number[]> {
-    const admins = (await this.users.list({ role: 'admin' }))
+  /** Quien hizo el cobro y los admins activos de SU negocio (nunca los de otro). */
+  private async recipients(notice: PaidChargeNotice): Promise<number[]> {
+    const admins = (
+      await this.users.list({ businessId: notice.businessId, role: 'admin' })
+    )
       .filter((u) => u.active)
       .map((u) => u.id);
+    const sellerId = notice.sellerId;
     const seller = await this.users.findById(sellerId);
     return [...new Set([...(seller?.active ? [seller.id] : []), ...admins])];
   }

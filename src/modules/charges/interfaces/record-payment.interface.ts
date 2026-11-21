@@ -2,6 +2,8 @@ import type { AttemptKind } from '../types/charge.types';
 
 /** Un pago ya confirmado con la API de pey (status PAID). */
 export interface RecordPaymentInput {
+  /** Negocio cuyas credenciales confirmaron el pago: solo se liga a SUS cobros. */
+  businessId: number;
   kind: AttemptKind;
   transactionId: string;
   /** Solo QR: IDC de Banxico. */

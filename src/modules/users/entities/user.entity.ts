@@ -11,6 +11,10 @@ export class User {
   @PrimaryGeneratedColumn()
   id!: number;
 
+  /** Negocio al que pertenece (sus cobros y su equipo). */
+  @Column({ name: 'business_id', type: 'integer' })
+  businessId!: number;
+
   /** citext: "Ana" y "ana" son el mismo usuario. */
   @Column({ type: 'citext', unique: true })
   username!: string;

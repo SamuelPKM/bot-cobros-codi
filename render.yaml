@@ -23,26 +23,22 @@ services:
         value: '22'
 
       # --- Secretos: Render los pide al aplicar el Blueprint ---
+      # No hay API key de pey global: cada negocio registra la suya (POST /businesses).
       - key: DATABASE_URL
         sync: false
-      - key: PEY_API_KEY
-        sync: false
-      # Se obtiene al registrar el webhook en portal.mipey.mx, después del primer
-      # despliegue. Mientras falte, /webhooks/pey responde 503 y pey reintenta.
-      - key: PEY_WEBHOOK_SECRET
-        sync: false
-      - key: ADMIN_USERNAME
-        sync: false
-      - key: ADMIN_PASSWORD
+      # URL pública de este servicio (https://<nombre>.onrender.com), para la URL de webhook de cada negocio
+      - key: PUBLIC_BASE_URL
         sync: false
       # Origen de la demo de Expo web (p. ej. https://cobrale-demo.netlify.app)
       - key: CORS_ORIGINS
         sync: false
-      - key: BUSINESS_NAME
-        sync: false
 
       # --- Generados y fijos ---
       - key: AUTH_SECRET
+        generateValue: true
+      # 256 bits en base64: cifra las API keys de los negocios. NO la cambies
+      # después: las credenciales guardadas dejarían de poder descifrarse.
+      - key: ENCRYPTION_KEY
         generateValue: true
       - key: DATABASE_SSL
         value: 'true'

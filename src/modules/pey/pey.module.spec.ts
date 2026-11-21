@@ -2,10 +2,10 @@ import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { PEY_FETCH } from './constants/pey.constants';
 import { PeyModule } from './pey.module';
-import { PeyClient } from './services/pey-client.service';
+import { PeyClientFactory } from './services/pey-client.factory';
 
 describe('PeyModule', () => {
-  it('arma PeyClient con PEY_API_KEY y PEY_BASE_URL de la configuración', async () => {
+  it('la fábrica arma un cliente con la API key de cada negocio y PEY_BASE_URL', async () => {
     const fetch = jest.fn(() =>
       Promise.resolve(new Response('{"id":"T","status":"PAID"}')),
     );
@@ -16,9 +16,7 @@ describe('PeyModule', () => {
         ConfigModule.forRoot({
           isGlobal: true,
           ignoreEnvFile: true,
-          load: [
-            () => ({ PEY_API_KEY: 'llave', PEY_BASE_URL: 'https://pey.test' }),
-          ],
+          load: [() => ({ PEY_BASE_URL: 'https://pey.test' })],
         }),
         PeyModule,
       ],
@@ -27,13 +25,19 @@ describe('PeyModule', () => {
       .useValue(fetch)
       .compile();
 
-    await moduleRef.get(PeyClient).getTransaction('T');
+    const factory = moduleRef.get(PeyClientFactory);
+    await factory.create('llave-de-ana').getTransaction('T');
+    await factory.create('llave-de-leo').getTransaction('T');
 
-    expect(fetch).toHaveBeenCalledWith(
-      'https://pey.test/transaction/T',
-      expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer llave' }),
-      }),
+    const auth = (fetch.mock.calls as unknown as [string, RequestInit][]).map(
+      ([url, init]) => [
+        url,
+        (init.headers as Record<string, string>).Authorization,
+      ],
     );
+    expect(auth).toEqual([
+      ['https://pey.test/transaction/T', 'Bearer llave-de-ana'],
+      ['https://pey.test/transaction/T', 'Bearer llave-de-leo'],
+    ]);
   });
 });

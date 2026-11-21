@@ -6,6 +6,7 @@ import type { PublicUser } from '../interfaces/public-user.interface';
 export function toPublicUser(user: User): PublicUser {
   return {
     id: user.id,
+    businessId: user.businessId,
     username: user.username,
     name: user.name,
     role: user.role,

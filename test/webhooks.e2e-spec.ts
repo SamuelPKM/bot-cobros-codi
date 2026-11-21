@@ -4,22 +4,26 @@ import { Webhook } from 'standardwebhooks';
 import { DataSource } from 'typeorm';
 import type { PublicCharge } from '../src/modules/charges/interfaces/public-charge.interface';
 import { PeyError } from '../src/modules/pey/errors/pey.error';
-import { UsersService } from '../src/modules/users/services/users.service';
 import { FakePeyClient } from './fakes/fake-pey-client';
 import {
   createTestApp,
   loginAs,
   resetDatabase,
   resetThrottling,
+  seedBusiness,
+  seedUser,
+  TEST_WEBHOOK_SECRET,
 } from './utils/test-app';
 
-const SECRET = process.env.PEY_WEBHOOK_SECRET!;
+const SECRET = TEST_WEBHOOK_SECRET;
 
 describe('Webhook de pey: pagos (e2e)', () => {
   let app: INestApplication;
   let pey: FakePeyClient;
   let http: ReturnType<typeof request>;
   let ana: string;
+  /** URL del webhook del negocio de las pruebas. */
+  let webhookPath: string;
   let messageCounter = 0;
 
   beforeAll(async () => {
@@ -35,10 +39,11 @@ describe('Webhook de pey: pagos (e2e)', () => {
     resetThrottling(app);
     await resetDatabase(app);
     pey.reset();
-    await app.get(UsersService).create({
+    const business = await seedBusiness(app);
+    webhookPath = `/webhooks/pey/${business.webhookSlug}`;
+    await seedUser(app, business.id, {
       username: 'ana',
       name: 'Ana',
-      role: 'seller',
       password: 'ana-12345',
     });
     ana = await loginAs(app, 'ana', 'ana-12345');
@@ -52,7 +57,7 @@ describe('Webhook de pey: pagos (e2e)', () => {
     const body = JSON.stringify(payload);
     const at = new Date();
     return http
-      .post('/webhooks/pey')
+      .post(webhookPath)
       .set('content-type', 'application/json')
       .set('webhook-id', id)
       .set('webhook-timestamp', String(Math.floor(at.getTime() / 1000)))
@@ -102,7 +107,7 @@ describe('Webhook de pey: pagos (e2e)', () => {
       await deliver(pushPaid('TX1'), {
         secret: 'whsec_b3Ryb3NlY3JldG9kaXN0aW50bw==',
       }).expect(401);
-      await http.post('/webhooks/pey').send(pushPaid('TX1')).expect(401);
+      await http.post(webhookPath).send(pushPaid('TX1')).expect(401);
       expect((await getCharge()).status).toBe('pending');
     });
 

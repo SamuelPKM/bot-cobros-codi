@@ -1,6 +1,6 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { hashPassword } from '../../../shared/security/password';
 import { User } from '../entities/user.entity';
 import type {
@@ -22,6 +22,11 @@ export class UsersService {
     return this.repo.findOneBy({ id });
   }
 
+  /** Un usuario solo si es de ese negocio (para que un admin no toque a gente de otro). */
+  findInBusiness(id: number, businessId: number): Promise<User | null> {
+    return this.repo.findOneBy({ id, businessId });
+  }
+
   findByUsername(username: string): Promise<User | null> {
     return this.repo.findOneBy({ username: username.trim() });
   }
@@ -35,21 +40,26 @@ export class UsersService {
       .getOne();
   }
 
-  list(filter: { role?: Role } = {}): Promise<User[]> {
+  list(filter: { businessId: number; role?: Role }): Promise<User[]> {
     return this.repo.find({
-      where: filter.role ? { role: filter.role } : {},
+      where: {
+        businessId: filter.businessId,
+        ...(filter.role ? { role: filter.role } : {}),
+      },
       order: { id: 'ASC' },
     });
   }
 
-  countAdmins(): Promise<number> {
-    return this.repo.countBy({ role: 'admin' });
-  }
-
-  async create(input: CreateUserInput): Promise<User> {
+  /**
+   * @param manager Para crear el usuario dentro de otra transacción (por
+   *   ejemplo, el admin junto con su negocio).
+   */
+  async create(input: CreateUserInput, manager?: EntityManager): Promise<User> {
+    const repo = manager ? manager.getRepository(User) : this.repo;
     try {
-      const saved = await this.repo.save(
-        this.repo.create({
+      const saved = await repo.save(
+        repo.create({
+          businessId: input.businessId,
           username: input.username.trim().toLowerCase(),
           name: input.name.trim(),
           role: input.role,
@@ -57,7 +67,7 @@ export class UsersService {
           maxAmountCents: input.maxAmountCents ?? null,
         }),
       );
-      return (await this.findById(saved.id))!;
+      return (await repo.findOneBy({ id: saved.id }))!;
     } catch (error) {
       if (
         error instanceof QueryFailedError &&

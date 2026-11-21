@@ -4,6 +4,7 @@ import {
   MIN_EXPIRATION_SECONDS,
 } from '../constants/pey.constants';
 import { PeyError } from '../errors/pey.error';
+import type { PeyApi } from '../interfaces/pey-api.interface';
 import type { PeyClientOptions } from '../interfaces/pey-client-options.interface';
 import type {
   CreatePushInput,
@@ -28,11 +29,19 @@ interface PeyErrorEnvelope {
  * Si falla la red o vence el tiempo, el error lo dice (`isOutcomeUnknown`) y
  * quien llama decide; el webhook ligará el pago por `metadata.chargeId`.
  */
-export class PeyClient {
+export class PeyClient implements PeyApi {
   private readonly timeoutMs: number;
 
   constructor(private readonly options: PeyClientOptions) {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  }
+
+  /**
+   * Comprueba que la API key sirve, con una consulta que no cobra nada
+   * (GET /transaction/api-key). Lanza PeyError con status 401/403 si pey no la reconoce.
+   */
+  async verifyApiKey(): Promise<void> {
+    await this.request<unknown>('GET', '/transaction/api-key');
   }
 
   /** POST /codi/pn: manda una solicitud de cobro CoDi al celular del pagador. */

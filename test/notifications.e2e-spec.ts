@@ -11,9 +11,12 @@ import {
   loginAs,
   resetDatabase,
   resetThrottling,
+  seedBusiness,
+  seedUser,
+  TEST_WEBHOOK_SECRET,
 } from './utils/test-app';
 
-const SECRET = process.env.PEY_WEBHOOK_SECRET!;
+const SECRET = TEST_WEBHOOK_SECRET;
 const ANA_DEVICE = 'ExponentPushToken[ana-celular]';
 const ADMIN_DEVICE = 'ExponentPushToken[dueno-celular]';
 
@@ -24,6 +27,7 @@ describe('Notificaciones de pago con Expo Push (e2e)', () => {
   let http: ReturnType<typeof request>;
   let ana: string;
   let admin: string;
+  let webhookPath: string;
   let counter = 0;
 
   beforeAll(async () => {
@@ -40,17 +44,11 @@ describe('Notificaciones de pago con Expo Push (e2e)', () => {
     await resetDatabase(app);
     pey.reset();
     expo.reset();
-    const users = app.get(UsersService);
-    await users.create({
-      username: 'dueno',
-      name: 'Dueño',
-      role: 'admin',
-      password: 'admin-12345',
-    });
-    await users.create({
+    const business = await seedBusiness(app);
+    webhookPath = `/webhooks/pey/${business.webhookSlug}`;
+    await seedUser(app, business.id, {
       username: 'ana',
       name: 'Ana',
-      role: 'seller',
       password: 'ana-12345',
     });
     ana = await loginAs(app, 'ana', 'ana-12345');
@@ -67,7 +65,7 @@ describe('Notificaciones de pago con Expo Push (e2e)', () => {
     const body = JSON.stringify(payload);
     const at = new Date();
     return http
-      .post('/webhooks/pey')
+      .post(webhookPath)
       .set('content-type', 'application/json')
       .set('webhook-id', id)
       .set('webhook-timestamp', String(Math.floor(at.getTime() / 1000)))
@@ -160,6 +158,21 @@ describe('Notificaciones de pago con Expo Push (e2e)', () => {
         transactionId: 'TX1',
       }).expect(200);
       expect(expo.sent).toHaveLength(2);
+    });
+
+    it('nunca avisa a los admins de otro negocio', async () => {
+      await seedBusiness(app, {
+        name: 'Otro negocio',
+        adminUsername: 'otro',
+        webhookSecret: null,
+      });
+      const otro = await loginAs(app, 'otro', 'admin-12345');
+      await registerDevice(otro, 'ExponentPushToken[otro-negocio]').expect(204);
+      await registerDevice(ana, ANA_DEVICE).expect(204);
+
+      await paidCharge();
+
+      expect(expo.sent.map((m) => m.to)).toEqual([ANA_DEVICE]);
     });
 
     it('no avisa a un admin desactivado', async () => {

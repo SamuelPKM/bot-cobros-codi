@@ -22,6 +22,11 @@ export class Charge {
   @PrimaryGeneratedColumn()
   id!: number;
 
+  /** Negocio que cobra: su API key de pey y su nombre. */
+  @Column({ name: 'business_id', type: 'integer' })
+  businessId!: number;
+
+  /** Persona que hizo el cobro (admin o vendedor). */
   @Column({ name: 'seller_id', type: 'integer' })
   sellerId!: number;
 

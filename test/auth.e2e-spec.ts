@@ -1,11 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { AdminSeeder } from '../src/modules/users/seeders/admin.seeder';
 import { UsersService } from '../src/modules/users/services/users.service';
 import {
   createTestApp,
   resetDatabase,
   resetThrottling,
+  seedBusiness,
+  seedUser,
 } from './utils/test-app';
 
 describe('Seguridad: autenticación y roles (e2e)', () => {
@@ -26,16 +27,11 @@ describe('Seguridad: autenticación y roles (e2e)', () => {
   beforeEach(async () => {
     resetThrottling(app);
     await resetDatabase(app);
-    await users.create({
-      username: 'dueno',
-      name: 'Dueño',
-      role: 'admin',
-      password: 'admin-12345',
-    });
-    await users.create({
+    // El negocio nace con su admin "dueno" (contraseña admin-12345).
+    const business = await seedBusiness(app);
+    await seedUser(app, business.id, {
       username: 'ana',
       name: 'Ana',
-      role: 'seller',
       password: 'ana-12345',
       maxAmountCents: 50_000,
     });
@@ -59,6 +55,7 @@ describe('Seguridad: autenticación y roles (e2e)', () => {
       expect(res.body.accessToken).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/);
       expect(res.body.user).toEqual({
         id: expect.any(Number),
+        businessId: expect.any(Number),
         username: 'ana',
         name: 'Ana',
         role: 'seller',
@@ -252,17 +249,6 @@ describe('Seguridad: autenticación y roles (e2e)', () => {
       const res = await http.get('/health').expect(200);
       expect(res.headers['x-content-type-options']).toBe('nosniff');
       expect(res.headers['x-powered-by']).toBeUndefined();
-    });
-
-    it('crea el admin inicial desde ADMIN_USERNAME y ADMIN_PASSWORD solo si no hay ninguno', async () => {
-      await resetDatabase(app);
-      const seeder = app.get(AdminSeeder);
-      await seeder.run();
-      await seeder.run();
-      expect(
-        (await users.list()).filter((u) => u.role === 'admin'),
-      ).toHaveLength(1);
-      await login(process.env.ADMIN_USERNAME!, process.env.ADMIN_PASSWORD!);
     });
   });
 });

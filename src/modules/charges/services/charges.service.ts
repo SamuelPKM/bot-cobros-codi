@@ -8,12 +8,10 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { DataSource, EntityManager } from 'typeorm';
-import type { Env } from '../../../config/env.validation';
 import { centsToPesos } from '../../../shared/money/money';
+import { BusinessesService } from '../../businesses/services/businesses.service';
 import { PeyError } from '../../pey/errors/pey.error';
-import { PeyClient } from '../../pey/services/pey-client.service';
 import type { User } from '../../users/entities/user.entity';
 import {
   MAX_PUSHES_PER_PAYER_PER_HOUR,
@@ -42,21 +40,23 @@ const QR_UNKNOWN_REASON = 'No se pudo generar el QR. Intenta de nuevo.';
 @Injectable()
 export class ChargesService {
   private readonly logger = new Logger(ChargesService.name);
-  private readonly businessName: string;
 
   constructor(
     private readonly dataSource: DataSource,
-    private readonly pey: PeyClient,
-    config: ConfigService<Env, true>,
-  ) {
-    this.businessName = config.get('BUSINESS_NAME', { infer: true });
-  }
+    private readonly businesses: BusinessesService,
+  ) {}
 
-  /** Crea el cobro y manda el push CoDi al celular del cliente. */
+  /**
+   * Crea el cobro y manda el push CoDi al celular del cliente, con la API key
+   * y el nombre del negocio de quien cobra (admin o vendedor).
+   */
   async createPushCharge(
     seller: User,
     input: CreateChargeInput,
   ): Promise<Charge> {
+    const { businessName, pey } = await this.businesses.paymentContext(
+      seller.businessId,
+    );
     if (
       seller.maxAmountCents !== null &&
       input.amountCents > seller.maxAmountCents
@@ -84,6 +84,7 @@ export class ChargesService {
         }
         const charge = await manager.save(
           manager.create(Charge, {
+            businessId: seller.businessId,
             sellerId: seller.id,
             payerPhone: input.payerPhone,
             amountCents: input.amountCents,
@@ -99,10 +100,10 @@ export class ChargesService {
 
     const expiresAt = new Date(Date.now() + PUSH_EXPIRATION_SECONDS * 1000);
     try {
-      const { transactionId, codiId } = await this.pey.createPush({
+      const { transactionId, codiId } = await pey.createPush({
         amount: centsToPesos(charge.amountCents),
         phoneNumber: charge.payerPhone,
-        concept: payerConcept(this.businessName, charge.concept),
+        concept: payerConcept(businessName, charge.concept),
         expiration: PUSH_EXPIRATION_SECONDS,
         numRef: numRef(charge.id),
         metadata: { chargeId: String(charge.id) },
@@ -126,15 +127,19 @@ export class ChargesService {
    * no existan dos QR cobrables de la misma venta.
    */
   async showQr(
-    seller: User,
+    user: User,
     chargeId: number,
   ): Promise<{ charge: Charge; attempt: PaymentAttempt }> {
+    const { businessName, pey } = await this.businesses.paymentContext(
+      user.businessId,
+    );
     const outcome = await this.dataSource.transaction(async (manager) => {
       const charge = await manager.findOne(Charge, {
-        where: { id: chargeId, sellerId: seller.id },
+        where: { id: chargeId, businessId: user.businessId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!charge) throw new NotFoundException('No existe ese cobro');
+      if (!charge || !canSee(user, charge))
+        throw new NotFoundException('No existe ese cobro');
       if (charge.status !== 'pending')
         throw new ConflictException('Este cobro ya no está pendiente');
 
@@ -152,9 +157,9 @@ export class ChargesService {
         manager.create(PaymentAttempt, { chargeId, kind: 'qr' }),
       );
       try {
-        const qr = await this.pey.createQr({
+        const qr = await pey.createQr({
           amount: centsToPesos(charge.amountCents),
-          concept: payerConcept(this.businessName, charge.concept),
+          concept: payerConcept(businessName, charge.concept),
           expiration: QR_EXPIRATION_SECONDS,
           numRef: numRef(charge.id),
           metadata: { chargeId: String(charge.id) },
@@ -186,7 +191,7 @@ export class ChargesService {
     };
   }
 
-  /** Vendedor: solo los suyos. Admin: todos, o los de un vendedor. Más reciente primero. */
+  /** Siempre dentro del negocio. Vendedor: solo los suyos. Admin: todos, o los de una persona. */
   list(user: User, filter: ListChargesFilter): Promise<Charge[]> {
     const query = this.dataSource
       .getRepository(Charge)
@@ -196,7 +201,10 @@ export class ChargesService {
       // Con take() + joins, TypeORM exige nombres de propiedad (createdAt), no de columna.
       .orderBy('charge.createdAt', 'DESC')
       .addOrderBy('charge.id', 'DESC')
-      .take(filter.limit);
+      .take(filter.limit)
+      .where('charge.business_id = :businessId', {
+        businessId: user.businessId,
+      });
 
     const sellerId = user.role === 'admin' ? filter.sellerId : user.id;
     if (sellerId !== undefined)
@@ -206,10 +214,14 @@ export class ChargesService {
     return query.getMany();
   }
 
-  /** Un cobro que el usuario puede ver; 404 si es de otro vendedor. */
+  /** Un cobro que el usuario puede ver; 404 si es de otro vendedor u otro negocio. */
   async findVisible(user: User, chargeId: number): Promise<Charge> {
     const charge = await this.findWithDetails(chargeId).catch(() => null);
-    if (!charge || (user.role !== 'admin' && charge.sellerId !== user.id)) {
+    if (
+      !charge ||
+      charge.businessId !== user.businessId ||
+      !canSee(user, charge)
+    ) {
       throw new NotFoundException('No existe ese cobro');
     }
     return charge;
@@ -275,6 +287,10 @@ export class ChargesService {
     return this.dataSource.getRepository(PaymentAttempt);
   }
 }
+
+/** Dentro del negocio: el admin ve todos los cobros; el vendedor, solo los suyos. */
+const canSee = (user: User, charge: Charge): boolean =>
+  user.role === 'admin' || charge.sellerId === user.id;
 
 /** numRef de CoDi (hasta 7 dígitos) derivado del id del cobro. */
 const numRef = (chargeId: number): string => String(chargeId % NUM_REF_MODULUS);

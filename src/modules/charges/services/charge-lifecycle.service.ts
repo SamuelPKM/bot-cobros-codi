@@ -23,20 +23,23 @@ export class ChargeLifecycleService {
       {
         id: number;
         charge_id: number;
+        business_id: number;
         kind: DueAttempt['kind'];
         transaction_id: string | null;
         qr_id: string | null;
       }[]
     >(
-      `SELECT id, charge_id, kind, transaction_id, qr_id FROM payment_attempts
-        WHERE status IN ('pending', 'unknown')
-          AND expires_at <= now() - make_interval(secs => $1)
-        ORDER BY id`,
+      `SELECT a.id, a.charge_id, c.business_id, a.kind, a.transaction_id, a.qr_id
+         FROM payment_attempts a JOIN charges c ON c.id = a.charge_id
+        WHERE a.status IN ('pending', 'unknown')
+          AND a.expires_at <= now() - make_interval(secs => $1)
+        ORDER BY a.id`,
       [EXPIRATION_GRACE_SECONDS],
     );
     return rows.map((r) => ({
       attemptId: r.id,
       chargeId: r.charge_id,
+      businessId: r.business_id,
       kind: r.kind,
       transactionId: r.transaction_id,
       qrId: r.qr_id,
@@ -93,13 +96,14 @@ export class ChargeLifecycleService {
     const rows = await this.dataSource.query<
       {
         id: number;
+        business_id: number;
         seller_id: number;
         name: string;
         amount_cents: number;
         concept: string | null;
       }[]
     >(
-      `SELECT c.id, c.seller_id, u.name, c.amount_cents, c.concept
+      `SELECT c.id, c.business_id, c.seller_id, u.name, c.amount_cents, c.concept
          FROM charges c JOIN users u ON u.id = c.seller_id
         WHERE c.status = 'paid' AND c.notified_at IS NULL ${extra}
         ORDER BY c.id`,
@@ -107,6 +111,7 @@ export class ChargeLifecycleService {
     );
     return rows.map((r) => ({
       chargeId: r.id,
+      businessId: r.business_id,
       sellerId: r.seller_id,
       sellerName: r.name,
       amountCents: r.amount_cents,

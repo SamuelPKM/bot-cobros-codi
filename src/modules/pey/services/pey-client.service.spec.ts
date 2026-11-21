@@ -163,6 +163,24 @@ describe('PeyClient', () => {
     });
   });
 
+  describe('verifyApiKey', () => {
+    it('consulta GET /transaction/api-key para comprobar que la key sirve', async () => {
+      const { fetch, calls } = fakeFetch(200, { items: [], nextToken: null });
+      await expect(client(fetch).verifyApiKey()).resolves.toBeUndefined();
+      expect(calls[0].url).toBe('https://api.pey.mx/transaction/api-key');
+      expect(calls[0].init.method).toBe('GET');
+    });
+
+    it('lanza PeyError con status 401 si pey no reconoce la key', async () => {
+      const { fetch } = fakeFetch(401, {
+        error: { message: 'Unauthorized', type: 'UNAUTHORIZED' },
+      });
+      await expect(client(fetch).verifyApiKey()).rejects.toMatchObject({
+        status: 401,
+      });
+    });
+  });
+
   describe('consultas', () => {
     it('getTransaction consulta GET /transaction/{id} con el id escapado', async () => {
       const { fetch, calls } = fakeFetch(200, {

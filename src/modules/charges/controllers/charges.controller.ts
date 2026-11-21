@@ -10,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { pesosToCents } from '../../../shared/money/money';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
-import { Roles } from '../../auth/decorators/roles.decorator';
 import type { User } from '../../users/entities/user.entity';
 import { CreateChargeDto } from '../dto/create-charge.dto';
 import { ListChargesQueryDto } from '../dto/list-charges.query.dto';
@@ -25,8 +24,7 @@ import { ChargesService } from '../services/charges.service';
 export class ChargesController {
   constructor(private readonly charges: ChargesService) {}
 
-  /** El vendedor cobra: crea el cobro y manda el push CoDi. */
-  @Roles('seller')
+  /** Cualquiera del equipo cobra (admin o vendedor): crea el cobro y manda el push CoDi. */
   @Post()
   @HttpCode(201)
   async create(
@@ -42,14 +40,13 @@ export class ChargesController {
   }
 
   /** Plan B: QR del mismo cobro para que el cliente lo escanee. */
-  @Roles('seller')
   @Post(':id/qr')
   @HttpCode(201)
   async showQr(
-    @CurrentUser() seller: User,
+    @CurrentUser() user: User,
     @Param('id', ParseIntPipe) id: number,
   ): Promise<{ charge: PublicCharge; qr: PublicQr }> {
-    const { charge, attempt } = await this.charges.showQr(seller, id);
+    const { charge, attempt } = await this.charges.showQr(user, id);
     return { charge: toPublicCharge(charge), qr: toPublicQr(attempt) };
   }
 

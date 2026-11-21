@@ -2,13 +2,14 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { PeyError } from '../src/modules/pey/errors/pey.error';
-import { UsersService } from '../src/modules/users/services/users.service';
 import { FakePeyClient } from './fakes/fake-pey-client';
 import {
   createTestApp,
   loginAs,
   resetDatabase,
   resetThrottling,
+  seedBusiness,
+  seedUser,
 } from './utils/test-app';
 
 describe('Cobros: push con QR de respaldo (e2e)', () => {
@@ -32,24 +33,17 @@ describe('Cobros: push con QR de respaldo (e2e)', () => {
     resetThrottling(app);
     await resetDatabase(app);
     pey.reset();
-    const users = app.get(UsersService);
-    await users.create({
-      username: 'dueno',
-      name: 'Dueño',
-      role: 'admin',
-      password: 'admin-12345',
-    });
-    await users.create({
+    // Negocio "Cóbrale" con su admin "dueno" y dos vendedores.
+    const business = await seedBusiness(app, { name: 'Cóbrale' });
+    await seedUser(app, business.id, {
       username: 'ana',
       name: 'Ana',
-      role: 'seller',
       password: 'ana-12345',
       maxAmountCents: 50_000,
     });
-    await users.create({
+    await seedUser(app, business.id, {
       username: 'leo',
       name: 'Leo',
-      role: 'seller',
       password: 'leo-12345',
     });
     ana = await loginAs(app, 'ana', 'ana-12345');
@@ -172,8 +166,8 @@ describe('Cobros: push con QR de respaldo (e2e)', () => {
       expect(pey.pushes).toHaveLength(1);
     });
 
-    it('solo los vendedores cobran y todo exige Bearer token', async () => {
-      await charge(admin, { phone: '5512345678', amount: 10 }).expect(403);
+    it('el admin también cobra, y todo exige Bearer token', async () => {
+      await charge(admin, { phone: '5512345678', amount: 10 }).expect(201);
       await http
         .post('/charges')
         .send({ phone: '5512345678', amount: 10 })

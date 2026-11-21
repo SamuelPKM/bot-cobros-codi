@@ -1,10 +1,11 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { UsersService } from '../src/modules/users/services/users.service';
 import {
   createTestApp,
   resetDatabase,
   resetThrottling,
+  seedBusiness,
+  seedUser,
 } from './utils/test-app';
 
 // setup-env.ts activa TRUST_PROXY y permite el origen http://localhost:8081.
@@ -26,10 +27,10 @@ describe('Listo para producción detrás de un proxy (e2e)', () => {
   beforeEach(async () => {
     resetThrottling(app);
     await resetDatabase(app);
-    await app.get(UsersService).create({
+    const business = await seedBusiness(app);
+    await seedUser(app, business.id, {
       username: 'ana',
       name: 'Ana',
-      role: 'seller',
       password: 'ana-12345',
     });
   });

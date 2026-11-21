@@ -8,6 +8,7 @@ import {
   hashPassword,
   verifyPassword,
 } from '../../../shared/security/password';
+import type { User } from '../../users/entities/user.entity';
 import { toPublicUser } from '../../users/mappers/user.mapper';
 import { UsersService } from '../../users/services/users.service';
 import type { JwtPayload } from '../interfaces/jwt-payload.interface';
@@ -37,6 +38,11 @@ export class AuthService {
         'Tu cuenta está desactivada. Habla con el administrador',
       );
 
+    return this.issueSession(user);
+  }
+
+  /** Emite el Bearer token de una persona (login o registro de su negocio). */
+  async issueSession(user: User): Promise<LoginResult> {
     const payload: JwtPayload = { sub: user.id, role: user.role };
     return {
       tokenType: 'Bearer',

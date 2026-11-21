@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { BusinessesService } from '../../businesses/services/businesses.service';
 import { paymentFromTransaction } from '../../charges/mappers/pey-payment.mapper';
 import { ChargePaymentsService } from '../../charges/services/charge-payments.service';
 import { PaymentNotifier } from '../../notifications/services/payment-notifier.service';
-import { PeyClient } from '../../pey/services/pey-client.service';
 import {
   CODI_PAYMENT_EVENTS,
   PEY_SOURCE,
@@ -17,11 +17,12 @@ import type {
 } from '../interfaces/pey-webhook-event.interface';
 
 /**
- * Procesa los webhooks de pey con entrega "al menos una vez":
- *  - Se registra cada webhook-id; uno ya procesado no se vuelve a procesar.
+ * Procesa los webhooks de pey de un negocio, con entrega "al menos una vez":
+ *  - Se registra cada webhook-id (por negocio); uno ya procesado no se repite.
  *  - Si algo falla se lanza el error (el controlador responde 500) y el evento
  *    queda sin `processed_at`, para que el reintento de pey lo procese.
- *  - El webhook es solo el aviso; la API de pey es la fuente de verdad del pago.
+ *  - El webhook es solo el aviso; la API de pey es la fuente de verdad del pago,
+ *    consultada con la API key del negocio.
  */
 @Injectable()
 export class PeyWebhookService {
@@ -30,45 +31,52 @@ export class PeyWebhookService {
   constructor(
     @InjectRepository(WebhookEvent)
     private readonly events: Repository<WebhookEvent>,
-    private readonly pey: PeyClient,
+    private readonly businesses: BusinessesService,
     private readonly payments: ChargePaymentsService,
     private readonly notifier: PaymentNotifier,
   ) {}
 
-  async handle({ id, event }: VerifiedWebhook): Promise<WebhookResult> {
+  async handle(
+    businessId: number,
+    { id, event }: VerifiedWebhook,
+  ): Promise<WebhookResult> {
+    const source = `${PEY_SOURCE}:${businessId}`;
     await this.events
       .createQueryBuilder()
       .insert()
-      .values({ source: PEY_SOURCE, id, type: event.type ?? null })
+      .values({ source, id, type: event.type ?? null })
       .orIgnore()
       .execute();
-    const recorded = await this.events.findOneByOrFail({
-      source: PEY_SOURCE,
-      id,
-    });
+    const recorded = await this.events.findOneByOrFail({ source, id });
     if (recorded.processedAt) {
-      this.logger.log(`${id} repetido, ya procesado (${recorded.result})`);
+      this.logger.log(
+        `${source} ${id} repetido, ya procesado (${recorded.result})`,
+      );
       return 'duplicate';
     }
 
     const kind = event.type ? CODI_PAYMENT_EVENTS[event.type] : undefined;
-    const result = kind ? await this.processPayment(event, kind) : 'ignored';
+    const result = kind
+      ? await this.processPayment(businessId, event, kind)
+      : 'ignored';
 
     await this.events.update(
-      { source: PEY_SOURCE, id },
+      { source, id },
       { processedAt: new Date(), result },
     );
-    this.logger.log(`${id} ${event.type ?? 'sin tipo'} -> ${result}`);
+    this.logger.log(`${source} ${id} ${event.type ?? 'sin tipo'} -> ${result}`);
     return result;
   }
 
   private async processPayment(
+    businessId: number,
     event: PeyWebhookEvent,
     kind: 'push' | 'qr',
   ): Promise<WebhookResult> {
     if (!event.transactionId) return 'missing_transaction_id';
 
-    const tx = await this.pey.getTransaction(event.transactionId);
+    const pey = await this.businesses.peyFor(businessId);
+    const tx = await pey.getTransaction(event.transactionId);
     if (tx.status !== 'PAID') {
       throw new Error(
         `la transacción ${event.transactionId} está en ${tx.status}, no en PAID`,
@@ -76,6 +84,7 @@ export class PeyWebhookService {
     }
 
     const payment = paymentFromTransaction(tx, kind, {
+      businessId,
       qrId: event.codiQrId,
       fallback: {
         chargeId: event.metadata?.externalMetadata?.chargeId,

@@ -18,15 +18,22 @@ export function paymentFromTransaction(
   tx: PeyTransaction,
   kind: AttemptKind,
   {
+    businessId,
     qrId,
     fallback = {},
-  }: { qrId?: string | null; fallback?: PaymentFallback } = {},
+  }: {
+    /** Negocio con cuyas credenciales se confirmó la transacción. */
+    businessId: number;
+    qrId?: string | null;
+    fallback?: PaymentFallback;
+  },
 ): RecordPaymentInput {
   const chargeId = Number(
     tx.metadata?.externalMetadata?.chargeId ?? fallback.chargeId,
   );
   const datePaid = tx.datePaid ?? fallback.datePaid;
   return {
+    businessId,
     kind,
     transactionId: tx.id,
     qrId: kind === 'qr' ? (qrId ?? undefined) : undefined,
