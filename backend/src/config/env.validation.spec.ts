@@ -24,7 +24,27 @@ describe('validateEnv', () => {
       SWEEPER_ENABLED: true,
       TRUST_PROXY: false,
       CORS_ORIGINS: [],
+      WHATSAPP: null,
     });
+  });
+
+  it('WhatsApp es opcional, pero se configura completo o nada', () => {
+    const whatsapp = {
+      WHATSAPP_TOKEN: 'token',
+      WHATSAPP_PHONE_NUMBER_ID: '1234567890',
+      WHATSAPP_APP_SECRET: 'secreto-de-la-app',
+      WHATSAPP_VERIFY_TOKEN: 'verificacion',
+    };
+    expect(validateEnv({ ...base, ...whatsapp }).WHATSAPP).toEqual({
+      token: 'token',
+      phoneNumberId: '1234567890',
+      appSecret: 'secreto-de-la-app',
+      verifyToken: 'verificacion',
+      apiVersion: 'v23.0',
+    });
+    expect(() => validateEnv({ ...base, WHATSAPP_TOKEN: 'token' })).toThrow(
+      /WHATSAPP_PHONE_NUMBER_ID[\s\S]*WHATSAPP_APP_SECRET[\s\S]*WHATSAPP_VERIFY_TOKEN/,
+    );
   });
 
   it('FRONTEND_URL: el origen de la web (Next.js) para armar ligas a sus pantallas', () => {

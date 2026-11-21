@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { PaidChargeNotice } from '../../charges/interfaces/charge-expiry.interface';
 import { ChargeLifecycleService } from '../../charges/services/charge-lifecycle.service';
 import { UsersService } from '../../users/services/users.service';
+import { WhatsAppPaymentNotifier } from '../../whatsapp/services/whatsapp-payment-notifier.service';
 import { paymentNotification } from '../policies/payment-notification.policy';
 import { ExpoPushClient } from './expo-push-client.service';
 import { PushTokensService } from './push-tokens.service';
@@ -20,6 +21,7 @@ export class PaymentNotifier {
     private readonly users: UsersService,
     private readonly tokens: PushTokensService,
     private readonly expo: ExpoPushClient,
+    private readonly whatsapp: WhatsAppPaymentNotifier,
   ) {}
 
   async notifyPaid(chargeId: number): Promise<void> {
@@ -55,6 +57,8 @@ export class PaymentNotifier {
     );
     await this.tokens.removeTokens(gone);
     await this.lifecycle.markNotified(notice.chargeId);
+    // Después de marcarlo: un reintento del push nunca repite el WhatsApp.
+    await this.whatsapp.notifyPaid(notice);
   }
 
   /** Quien hizo el cobro y los admins activos de SU negocio (nunca los de otro). */

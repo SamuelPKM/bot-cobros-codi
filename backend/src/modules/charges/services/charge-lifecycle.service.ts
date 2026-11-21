@@ -102,11 +102,15 @@ export class ChargeLifecycleService {
         seller_id: number;
         name: string;
         amount_cents: number;
+        payer_phone: string | null;
         concept: string | null;
+        tracking_key: string | null;
       }[]
     >(
-      `SELECT c.id, c.business_id, c.seller_id, u.name, c.amount_cents, c.concept
+      `SELECT c.id, c.business_id, c.seller_id, u.name, c.amount_cents,
+              c.payer_phone, c.concept, a.tracking_key
          FROM charges c JOIN users u ON u.id = c.seller_id
+         LEFT JOIN payment_attempts a ON a.id = c.paid_attempt_id
         WHERE c.status = 'paid' AND c.notified_at IS NULL ${extra}
         ORDER BY c.id`,
       params,
@@ -117,7 +121,9 @@ export class ChargeLifecycleService {
       sellerId: r.seller_id,
       sellerName: r.name,
       amountCents: r.amount_cents,
+      payerPhone: r.payer_phone,
       concept: r.concept,
+      trackingKey: r.tracking_key,
     }));
   }
 }

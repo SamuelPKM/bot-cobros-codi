@@ -66,6 +66,24 @@ La liga regresa al cliente a `FRONTEND_URL/pago/gracias` o `/pago/cancelado` (pa
 | `GET /invitations/token/:token` | público | A qué negocio y con qué rol invitan (404 si no existe, 410 si ya se usó, venció o se revocó) |
 | `POST /invitations/token/:token/accept` | público (5/min por IP) | Crea la cuenta con el rol de la invitación y abre sesión; sirve una sola vez |
 
+### WhatsApp
+
+Opcional: se activa con las cuatro variables `WHATSAPP_*` (si falta alguna, la API no arranca y dice cuál). Sin ellas, `/webhooks/whatsapp` responde 404.
+
+| Ruta | Quién | Qué hace |
+|---|---|---|
+| `GET /me/whatsapp` | cualquiera | `{ linked, phone }` del número ligado |
+| `POST /me/whatsapp/link-code` | cualquiera | Código de 6 dígitos (10 min, un uso); se manda por WhatsApp como `vincular 123456` |
+| `DELETE /me/whatsapp` | cualquiera | Desliga el número |
+| `GET /webhooks/whatsapp` | Meta | Verificación de la URL con `WHATSAPP_VERIFY_TOKEN` (403 si no coincide) |
+| `POST /webhooks/whatsapp` | Meta | Mensajes entrantes; firma `X-Hub-Signature-256` (401). Responde 200 aunque falle la respuesta, para que Meta no reenvíe |
+
+- Cada mensaje se atiende una sola vez (`webhook_events`, fuente `whatsapp`).
+- Un número sin cuenta, o de una persona desactivada, recibe cómo registrarse en `FRONTEND_URL`.
+- 5 códigos equivocados desde un número lo pausan 15 minutos.
+- El QR llega como imagen y, cuando el cliente paga, quien cobró recibe "✅ Pagado" con la clave de rastreo (además del push).
+- En Meta: suscribe la app al campo `messages` y registra `https://<api>/webhooks/whatsapp` con el mismo verify token.
+
 - Los cobros, avisos y el barrido usan la API key **del negocio del cobro**. El dinero llega a la cuenta del titular de esas credenciales (regla 7.3(c) del hackatón) y nadie concentra pagos de terceros (regla 7.1).
 - La API key y el secreto del webhook se guardan **cifrados** (AES-256-GCM con `ENCRYPTION_KEY`) y nunca salen en una respuesta.
 - Todo está separado por negocio: un admin solo ve y administra a su equipo y sus cobros, y un webhook solo puede marcar pagados cobros de su propio negocio.
@@ -115,6 +133,16 @@ src/
    │  ├─ services/         # verificador Standard Webhooks e idempotencia por negocio y webhook-id
    │  ├─ entities/         # WebhookEvent
    │  └─ constants/  interfaces/
+   ├─ conversations/       # motor de chat (WhatsApp y demo): cobra, sí/no, qr, liga, resumen, ayuda. Sin endpoints
+   │  ├─ services/         # ConversationService.handle(user, texto) → respuestas
+   │  ├─ policies/         # parser de comandos y textos del chat (funciones puras)
+   │  └─ entities/  interfaces/  constants/
+   ├─ whatsapp/            # canal de WhatsApp Cloud API (Meta)
+   │  ├─ controllers/      # GET/POST /webhooks/whatsapp (firma de Meta) y /me/whatsapp (ligar el número)
+   │  ├─ services/         # WhatsAppClient, cuentas ligadas, mensajes entrantes, aviso "✅ Pagado"
+   │  ├─ policies/         # firma de Meta, número 521→10 dígitos, QR a PNG, textos del canal
+   │  ├─ whatsapp-messaging.module.ts  # solo mandar (lo usa notifications, sin ciclos)
+   │  └─ entities/  interfaces/  errors/  constants/
    ├─ notifications/       # Expo Push: "Pago recibido" a quien cobró y a los admins de su negocio
    │  ├─ controllers/      # POST/DELETE /push-tokens (registrar o quitar el dispositivo)
    │  ├─ services/         # ExpoPushClient, PushTokensService, PaymentNotifier

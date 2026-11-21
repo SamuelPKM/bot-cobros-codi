@@ -37,7 +37,26 @@ export interface Env {
   TRUST_PROXY: boolean;
   /** Orígenes que pueden llamar la API desde un navegador (la demo de Expo web). */
   CORS_ORIGINS: string[];
+  /** WhatsApp Cloud API (Meta). null si no está configurado: la API funciona igual sin él. */
+  WHATSAPP: WhatsAppConfig | null;
 }
+
+export interface WhatsAppConfig {
+  token: string;
+  phoneNumberId: string;
+  /** Verifica la firma X-Hub-Signature-256 de los webhooks de Meta. */
+  appSecret: string;
+  /** Lo inventas tú; se escribe igual al registrar el webhook en Meta. */
+  verifyToken: string;
+  apiVersion: string;
+}
+
+const WHATSAPP_VARS = [
+  'WHATSAPP_TOKEN',
+  'WHATSAPP_PHONE_NUMBER_ID',
+  'WHATSAPP_APP_SECRET',
+  'WHATSAPP_VERIFY_TOKEN',
+] as const;
 
 /** Un origen: esquema y host (con puerto opcional), sin ruta ni comodines. */
 const ORIGIN = /^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/i;
@@ -97,6 +116,12 @@ export function validateEnv(raw: Record<string, unknown>): Env {
       `CORS_ORIGINS solo acepta orígenes como https://mi-demo.app (sin ruta ni *): ${badOrigins.join(', ')}`,
     );
 
+  // WhatsApp: opcional, pero completo o nada.
+  const whatsappPresent = WHATSAPP_VARS.filter((name) => text(raw[name]));
+  const whatsappMissing = WHATSAPP_VARS.filter((name) => !text(raw[name]));
+  if (whatsappPresent.length > 0 && whatsappMissing.length > 0)
+    errors.push(`Para activar WhatsApp faltan: ${whatsappMissing.join(', ')}`);
+
   if (errors.length > 0) {
     throw new Error(
       `Configuración inválida (revisa tu .env):\n- ${errors.join('\n- ')}`,
@@ -120,5 +145,15 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     SWEEPER_ENABLED: text(raw.SWEEPER_ENABLED) !== 'false',
     TRUST_PROXY: text(raw.TRUST_PROXY) === 'true',
     CORS_ORIGINS: corsOrigins,
+    WHATSAPP:
+      whatsappMissing.length === 0
+        ? {
+            token: text(raw.WHATSAPP_TOKEN)!,
+            phoneNumberId: text(raw.WHATSAPP_PHONE_NUMBER_ID)!,
+            appSecret: text(raw.WHATSAPP_APP_SECRET)!,
+            verifyToken: text(raw.WHATSAPP_VERIFY_TOKEN)!,
+            apiVersion: text(raw.WHATSAPP_API_VERSION) ?? 'v23.0',
+          }
+        : null,
   };
 }

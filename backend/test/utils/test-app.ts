@@ -11,7 +11,9 @@ import { ExpoPushClient } from '../../src/modules/notifications/services/expo-pu
 import { PeyClientFactory } from '../../src/modules/pey/services/pey-client.factory';
 import { UsersService } from '../../src/modules/users/services/users.service';
 import type { Role } from '../../src/modules/users/types/role.type';
+import { WhatsAppClient } from '../../src/modules/whatsapp/services/whatsapp-client.service';
 import { FakeExpoPushClient } from '../fakes/fake-expo-push-client';
+import { FakeWhatsAppClient } from '../fakes/fake-whatsapp-client';
 import type { FakePeyClient } from '../fakes/fake-pey-client';
 import { FakePeyClientFactory } from '../fakes/fake-pey-client-factory';
 
@@ -23,6 +25,8 @@ export interface TestApp {
   peyFactory: FakePeyClientFactory;
   /** Expo Push simulado. */
   expo: FakeExpoPushClient;
+  /** WhatsApp Cloud API simulado. */
+  whatsapp: FakeWhatsAppClient;
 }
 
 /**
@@ -43,6 +47,7 @@ export async function createTestApp(): Promise<TestApp> {
 
   const peyFactory = new FakePeyClientFactory();
   const expo = new FakeExpoPushClient();
+  const whatsapp = new FakeWhatsAppClient();
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
@@ -50,11 +55,13 @@ export async function createTestApp(): Promise<TestApp> {
     .useValue(peyFactory)
     .overrideProvider(ExpoPushClient)
     .useValue(expo)
+    .overrideProvider(WhatsAppClient)
+    .useValue(whatsapp)
     .compile();
   const app = moduleRef.createNestApplication({ rawBody: true });
   configureApp(app);
   await app.init();
-  return { app, pey: peyFactory.client, peyFactory, expo };
+  return { app, pey: peyFactory.client, peyFactory, expo, whatsapp };
 }
 
 /** Olvida los intentos contados por los límites (cada prueba empieza de cero). */

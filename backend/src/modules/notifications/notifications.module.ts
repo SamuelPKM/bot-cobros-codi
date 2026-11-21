@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import type { Env } from '../../config/env.validation';
 import { ChargesModule } from '../charges/charges.module';
 import { UsersModule } from '../users/users.module';
+import { WhatsAppMessagingModule } from '../whatsapp/whatsapp-messaging.module';
 import { EXPO_FETCH } from './constants/notifications.constants';
 import { PushTokensController } from './controllers/push-tokens.controller';
 import { PushToken } from './entities/push-token.entity';
@@ -12,7 +13,12 @@ import { PaymentNotifier } from './services/payment-notifier.service';
 import { PushTokensService } from './services/push-tokens.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([PushToken]), ChargesModule, UsersModule],
+  imports: [
+    TypeOrmModule.forFeature([PushToken]),
+    ChargesModule,
+    UsersModule,
+    WhatsAppMessagingModule,
+  ],
   controllers: [PushTokensController],
   providers: [
     PushTokensService,

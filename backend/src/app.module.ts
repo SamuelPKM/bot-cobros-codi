@@ -14,6 +14,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { SweeperModule } from './modules/sweeper/sweeper.module';
 import { UsersModule } from './modules/users/users.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     WebhooksModule,
     NotificationsModule,
     SweeperModule,
+    WhatsAppModule,
     HealthModule,
   ],
 })

@@ -20,5 +20,9 @@ export interface PaidChargeNotice {
   sellerId: number;
   sellerName: string;
   amountCents: number;
+  /** null en cobros por QR o liga (no hay celular del cliente). */
+  payerPhone: string | null;
   concept: string | null;
+  /** Clave de rastreo SPEI del pago, si pey la dio. */
+  trackingKey: string | null;
 }
