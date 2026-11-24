@@ -19,7 +19,7 @@ front/      Un proyecto por aplicación, cada uno con su package.json:
   web/      Web en Next.js 16 (panel, registro, invitaciones, demo pública, regreso de la liga)
   mobile/   App en Expo (más adelante)
 docs/       Plan y documentos de entrega del hackatón
-render.yaml Blueprint de Render (la API con rootDir: backend)
+deploy/aws/  Instalación en AWS: EC2 con Docker y Caddy (ver docs/deploy-aws.md)
 ```
 
 El código de Express (`src/`, `test/`, `scripts/`) se retiró en esta rama y sigue en `main` y en el historial.
@@ -32,7 +32,7 @@ El código de Express (`src/`, `test/`, `scripts/`) se retiró en esta rama y si
 | F1 | Backend: liga de pago, invitaciones con liga de un solo uso, cambio de rol (sin dejar el negocio sin admin), resumen del día por persona y CSV | ✅ |
 | F2 | Backend: motor de conversación (cobra, sí/no, qr, liga, resumen, ayuda) ✅, WhatsApp (webhook de Meta, vincular número, QR como imagen, "✅ Pagado") ✅ y demo pública con límites ✅ | ✅ |
 | F3 | `front/web` Next.js: entrar con sesión en cookie httpOnly, registro con API key, panel (resumen del día y cobros), nuevo cobro (push, QR, liga), detalle con plan B y "Pagado" en vivo, ajustes (negocio, API key, webhook, WhatsApp), equipo (alta, edición, invitaciones) aceptar invitación, demo pública (chat con "Pagado" en vivo) y páginas de regreso de la liga ✅ | ✅ |
-| F4 | IP real del visitante en la API ✅ (FRONT_PROXY_SECRET); Blueprint de Render con la API y la web ✅; guía de deploy y documentos de entrega al día ✅; CSV en la web ✅; pull request ✅. Falta (👤): aplicar el Blueprint, primer cobro real de $0.01 y llenar las URL de la entrega | ⏳ |
+| F4 | IP real del visitante en la API ✅ (FRONT_PROXY_SECRET); deploy en AWS con la API y la web ✅ (reemplaza al Blueprint de Render); guía de deploy y documentos de entrega al día ✅; CSV en la web ✅; pull request ✅. Falta (👤): crear el servidor en AWS, primer cobro real de $0.01 y llenar las URL de la entrega | ⏳ |
 
 ## Regla: nada de front en Nest
 

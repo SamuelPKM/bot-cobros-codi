@@ -13,11 +13,11 @@ npm run migration:run
 npm run start:dev
 ```
 
-Después registra un negocio con `POST /businesses` (ver [docs/deploy.md](docs/deploy.md), paso 5).
+Después registra un negocio con `POST /businesses` (ver [docs/deploy-aws.md](../docs/deploy-aws.md), paso 4).
 
 ## Deploy
 
-Render (API) + Neon (Postgres), con el blueprint `render.yaml`. Paso a paso y primer cobro real de $0.01: [docs/deploy.md](docs/deploy.md).
+AWS EC2 (la API y la web en Docker, detrás de Caddy) + Neon (Postgres). La imagen de la API es [Dockerfile](Dockerfile); paso a paso y primer cobro real de $0.01: [docs/deploy-aws.md](../docs/deploy-aws.md).
 
 ## Pruebas (TDD)
 

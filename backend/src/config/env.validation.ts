@@ -33,7 +33,7 @@ export interface Env {
   EXPO_ACCESS_TOKEN: string | undefined;
   /** Barrido periódico de cobros (true por defecto; las pruebas lo apagan). */
   SWEEPER_ENABLED: boolean;
-  /** true detrás de un proxy (Render): toma la IP real de X-Forwarded-For para los límites. */
+  /** true detrás de un proxy (Caddy en AWS): toma la IP real de X-Forwarded-For para los límites. */
   TRUST_PROXY: boolean;
   /** Orígenes que pueden llamar la API desde un navegador (la demo de Expo web). */
   CORS_ORIGINS: string[];

@@ -49,7 +49,9 @@ Desde el 14 de noviembre de 2026:
 | [Jest](https://jestjs.io), [Vitest](https://vitest.dev) y [Testing Library](https://testing-library.com) | Pruebas automáticas | MIT |
 | [PostgreSQL](https://www.postgresql.org) 16 | Base de datos (Docker en desarrollo) | PostgreSQL License |
 | [Neon](https://neon.tech) | Postgres administrado (servicio) | Términos de Neon |
-| [Render](https://render.com) | Hospedaje de la API y la web (servicio) | Términos de Render |
+| [Amazon Web Services](https://aws.amazon.com) (EC2, SSM Parameter Store) | Hospedaje de la API y la web, y resguardo cifrado de la configuración (servicio) | Términos de AWS |
+| [Docker](https://www.docker.com) | Contenedores de la API, la web y el proxy | Apache-2.0 |
+| [Caddy](https://caddyserver.com) | Proxy con HTTPS automático (Let's Encrypt) | Apache-2.0 |
 
 Las dependencias que estas librerías traen consigo están en `backend/package-lock.json` y `front/web/package-lock.json`.
 

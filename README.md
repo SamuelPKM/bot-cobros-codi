@@ -35,7 +35,4 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Deploy y primer cobro real de $0.01:
-
-- **Render**, con los dos servicios del Blueprint: [backend/docs/deploy.md](backend/docs/deploy.md).
-- **AWS**, en una instancia EC2 siempre encendida, con Docker y HTTPS automático, todo desde CloudShell: [docs/deploy-aws.md](docs/deploy-aws.md).
+Deploy en AWS (una instancia EC2 con la API y la web en Docker, HTTPS automático, todo desde CloudShell) y primer cobro real de $0.01: [docs/deploy-aws.md](docs/deploy-aws.md).

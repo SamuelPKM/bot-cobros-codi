@@ -1,5 +1,4 @@
-# Imagen de la web (Next.js). La usa la instalación en AWS (docs/deploy-aws.md);
-# Render no la necesita.
+# Imagen de la web (Next.js) para la instalación en AWS (docs/deploy-aws.md).
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1

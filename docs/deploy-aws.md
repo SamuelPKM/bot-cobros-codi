@@ -1,8 +1,10 @@
-# Instalar Cóbrale en AWS (EC2 + Docker), con Postgres en Neon
+# Deploy en AWS y primer cobro real ($0.01)
 
-Alternativa a Render ([backend/docs/deploy.md](../backend/docs/deploy.md)). Todo se hace desde **AWS CloudShell**, la terminal que trae la consola de AWS en el navegador: no instalas nada en tu computadora y no hace falta SSH.
+Arquitectura: **AWS EC2** (la API y la web en Docker, detrás de Caddy) + **Neon** (Postgres) + **pey** (CoDi). No hay sandbox de pey: todo se prueba en producción con **$0.01**.
 
-A diferencia de Render Free, el servidor nunca se duerme. El barrido de cobros vencidos corre siempre, y el primer request no tarda un minuto.
+Todo se hace desde **AWS CloudShell**, la terminal que trae la consola de AWS en el navegador: no instalas nada en tu computadora y no hace falta SSH. El servidor está siempre encendido, así que el barrido de cobros vencidos nunca se detiene.
+
+**Cada negocio usa su propia API key de pey.** El servidor no tiene credenciales de pey propias: un negocio se registra en la web con SU API key, y sus cobros se hacen con ella. Así el dinero llega a la cuenta del titular de esas credenciales (regla 7.3(c) del hackatón) y nadie concentra pagos de terceros (regla 7.1).
 
 | Recurso | Configuración |
 | --- | --- |
@@ -11,11 +13,9 @@ A diferencia de Render Free, el servidor nunca se duerme. El barrido de cobros v
 | Web | `front/web` (Next.js) en otro contenedor; habla con la API por la red interna de Docker |
 | HTTPS | Caddy, con certificados automáticos y renovación sola |
 | URLs | Web en `https://<ip>.sslip.io` y API en `https://api.<ip>.sslip.io` (gratis, sin comprar dominio), o tu propio dominio |
-| Base de datos | Postgres en Neon (`DATABASE_URL`), igual que en Render |
+| Base de datos | Postgres en Neon (`DATABASE_URL`) |
 | Secretos | SSM Parameter Store, cifrados, bajo `/cobrale/...` |
 | Acceso al servidor | Session Manager y Run Command de SSM. El firewall solo abre 80 y 443 |
-
-No hay API key de pey en el servidor: cada negocio registra la suya en la web.
 
 ## Qué instancia elegir
 
@@ -40,7 +40,10 @@ Para no tener sorpresas, crea una alerta: **Billing > Budgets > Create budget > 
 
 ## Antes de empezar
 
-1. **La base en Neon**: proyecto en **AWS US East 2 (Ohio)** y la cadena de conexión **directa** (sin `-pooler`). Ver el paso 1 de [backend/docs/deploy.md](../backend/docs/deploy.md).
+1. **La base en Neon**:
+   - En [neon.tech](https://neon.tech), crea un proyecto en la región **AWS US East 2 (Ohio)**.
+   - En *Connection Details* elige la conexión **directa**: el host **no** debe llevar `-pooler`. Copia la cadena `postgresql://...?sslmode=require`.
+   - No uses la conexión *pooled*: el barrido usa un advisory lock de sesión, y PgBouncer en modo transacción cambia de sesión entre consultas.
 2. **Un token de GitHub de solo lectura**, para que el servidor baje el código del repositorio privado:
    - En GitHub: **Settings > Developer settings > Personal access tokens > Fine-grained tokens > Generate new token**.
    - **Repository access**: *Only select repositories* > `bot-cobros-codi`.
@@ -88,22 +91,55 @@ Al final muestra las URLs, por ejemplo `https://3-91-20-115.sslip.io` (web) y `h
 DOMAIN=cobrale.tudominio.mx bash deploy/aws/crear.sh
 ```
 
-## 3. Registrar el negocio del equipo y su webhook
+## 3. Cuenta y API key de pey del negocio
 
-1. Abre la web y registra el negocio del equipo con **su** API key de pey (portal.pey.mx > Desarrollador).
-2. En **Ajustes** aparece la URL de su webhook: `https://api.<...>/webhooks/pey/<código>`.
-3. En portal.pey.mx, en el engrane de esa API key, crea el webhook con esa URL. Copia el secreto (`whsec_...`; solo se muestra una vez) y pégalo en **Ajustes**.
-4. Haz un cobro de $0.01 a tu celular: la página cambia sola a **Pagado**.
+Esto lo hace **cada negocio** con su propia cuenta de pey. Para la demo del hackatón, el negocio del equipo.
 
-## 4. Activar la demo pública
+1. En [portal.mipey.mx](https://portal.mipey.mx) crea el perfil del negocio.
+2. En **Finanzas**, da de alta la cuenta CoDi con la CLABE **del negocio**. Banxico tarda **hasta 5 días hábiles** en activarla.
+   - Mientras tanto se puede usar la cuenta de pruebas que publica pey, que se activa de inmediato. **Lo que se paga ahí no se devuelve**: usa solo $0.01.
+3. En **Desarrollador**, haz clic en **Crear API Key**, ligada a esa cuenta, y guárdala.
 
-La demo cobra con la API key del negocio del equipo. Guarda su id (en el paso 7 de [backend/docs/deploy.md](../backend/docs/deploy.md) se explica cómo verlo):
+## 4. Registrar el negocio y su webhook (en la web)
 
-```bash
-bash deploy/aws/variable.sh api DEMO_BUSINESS_ID --visible
-```
+1. Abre la web y ve a **Registra tu negocio**. Pide nombre del negocio, tu nombre, usuario, contraseña y la API key. La API la valida con pey; si pey no la reconoce, no se crea nada.
+2. Entras al panel con un aviso: **Falta registrar el webhook de pey**. Ve a **Ajustes**:
+   1. Copia la **URL del webhook**. Tiene la forma `https://api.<...>/webhooks/pey/<código>`.
+   2. En el portal de pey, en **Desarrollador**, abre el engrane de la API key y elige **Crear Webhook** con esa URL.
+   3. Copia el secreto (`whsec_...`; **se muestra una sola vez**) y pégalo en **Ajustes → Secreto del webhook**. Debe decir "✅ Registrado".
 
-`/demo` en la web ya funciona, con un tope de `DEMO_MAX_AMOUNT` ($1) por cobro.
+## 5. Primer cobro real de $0.01
+
+Usa **tu propio celular**, registrado en CoDi en la app de tu banco (las reglas piden datos ficticios o propios).
+
+1. **Nuevo cobro** → Push al celular, tu celular, `0.01`, concepto "Prueba" → **Cobrar**.
+2. Aprueba el cobro en la app de tu banco. La página del cobro cambia sola a **✅ Pagado**.
+3. Plan B: si el push no llega, en el mismo cobro usa **Mostrar QR** y escanéalo con tu banco.
+
+## 6. Demo pública y cuenta para el jurado
+
+1. Busca el id del negocio del paso 4: es el `businessId` que da `GET /me` de la API, o el número en la tabla `businesses` de Neon.
+2. Guárdalo; la API se reinicia sola:
+
+   ```bash
+   bash deploy/aws/variable.sh api DEMO_BUSINESS_ID --visible
+   ```
+
+   `/demo` en la web ya funciona, con un tope de `DEMO_MAX_AMOUNT` ($1) por cobro.
+3. Cuenta para el jurado: en **Equipo**, da de alta a una persona con un tope de $1.00 (o invítala). Si le das rol de administrador podrá probar Equipo y Ajustes, pero también cambiar el nombre, la API key o el secreto del negocio: revísalos antes de la evaluación.
+
+## 7. WhatsApp (opcional)
+
+1. En [developers.facebook.com](https://developers.facebook.com), crea la app de WhatsApp Business y copia el *token*, el *Phone number ID* y el *App secret*.
+2. Inventa un *verify token*. Guarda las cuatro variables, una por una (se piden sin mostrarlas):
+
+   ```bash
+   bash deploy/aws/variable.sh api WHATSAPP_TOKEN
+   ```
+
+   Repite con `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET` y `WHATSAPP_VERIFY_TOKEN`. Son las cuatro o ninguna.
+3. En Meta, registra el webhook `https://api.<...>/webhooks/whatsapp` con ese verify token y suscríbete al campo `messages`.
+4. En la web, **Ajustes → WhatsApp → Obtener código**, y manda `vincular 123456` al número de la app.
 
 ## Operación
 
@@ -114,7 +150,6 @@ bash deploy/aws/variable.sh api DEMO_BUSINESS_ID --visible
 | Cambiar una variable secreta | `bash deploy/aws/variable.sh api NOMBRE` |
 | Cambiar una variable visible | `bash deploy/aws/variable.sh api DEMO_MAX_AMOUNT --visible` |
 | Quitar una variable | `bash deploy/aws/variable.sh api CORS_ORIGINS --borrar` |
-| Activar WhatsApp | `bash deploy/aws/variable.sh api WHATSAPP_TOKEN`, y lo mismo con `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET` y `WHATSAPP_VERIFY_TOKEN` (las cuatro o ninguna). El webhook de Meta es `https://api.<...>/webhooks/whatsapp` |
 | Renovar el token de GitHub | `bash deploy/aws/variable.sh GITHUB_TOKEN` |
 | Ver estado, memoria y registros | `bash deploy/aws/registros.sh` |
 | Entrar al servidor | Consola de EC2 > instancia `cobrale` > **Connect** > **Session Manager** |
@@ -149,11 +184,11 @@ El rol de la instancia solo puede leer `/cobrale/*` y ser administrado por SSM. 
 | --- | --- |
 | `crear.sh` termina sin que las URLs respondan | `bash deploy/aws/registros.sh`: la sección "primer arranque" muestra en qué paso falló |
 | "No se pudo bajar el código" | El token de GitHub no tiene acceso de lectura al repositorio o venció: `bash deploy/aws/variable.sh GITHUB_TOKEN` y luego `bash deploy/aws/actualizar.sh` |
-| La API no queda sana | Los registros muestran el error. Lo más común es una `DATABASE_URL` mal copiada: `bash deploy/aws/variable.sh api DATABASE_URL` |
+| La API no queda sana, o `/health` responde `database: down` | Los registros muestran el error. Lo más común es una `DATABASE_URL` mal copiada o con `-pooler`: `bash deploy/aws/variable.sh api DATABASE_URL` |
 | El navegador avisa que el certificado no es válido | Caddy todavía lo está pidiendo; espera un par de minutos. Con tu dominio, revisa que los dos registros A apunten a la IP elástica |
-| El webhook de pey responde 503 | El negocio no ha pegado el secreto de su webhook en Ajustes |
+| El registro dice que la API key no es válida | Cópiala otra vez desde portal.mipey.mx > Desarrollador |
+| El push queda fallido con "la cuenta… no está activa" | La cuenta CoDi del negocio todavía no está activa en pey (paso 3) |
+| Se pagó pero sigue pendiente | En el portal de pey, revisa **Webhook Logs**. Un 401: el secreto no es el de esa API key. Un 503: falta el secreto en Ajustes. De todos modos el barrido lo concilia con pey al vencer el intento (unos 6 minutos) |
 | La liga de pago dice que falta `FRONTEND_URL` | Revisa `/cobrale/api/FRONTEND_URL` en Parameter Store: debe ser la URL `https://` de la web |
 | `actualizar.sh` falla al construir con `t3.micro` | Falta memoria. Cambia la instancia a `t3.small` (consola de EC2 > instancia detenida > **Change instance type**) y vuelve a correr `actualizar.sh` |
 | "no hay una instancia cobrale encendida" | Revisa en la consola de EC2 que esté *Running* y en `us-east-2`, o pasa `REGION=...` |
-
-Si usas AWS, no apliques también el Blueprint de Render sobre la misma base. Tendrías dos barridos y dos APIs, y pey manda el webhook de cada negocio a una sola URL.

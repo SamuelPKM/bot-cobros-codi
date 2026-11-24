@@ -12,7 +12,7 @@ process.env.FRONTEND_URL ??= 'https://cobrale.test';
 process.env.TEST_WEBHOOK_SECRET ??= 'whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw';
 // Las pruebas corren el barrido a mano (sweeper.sweep()), no con el intervalo.
 process.env.SWEEPER_ENABLED = 'false';
-// Como en Render: detrás de un proxy, y la demo de Expo web en localhost:8081.
+// Como en producción: detrás de un proxy (Caddy), y la demo de Expo web en localhost:8081.
 process.env.TRUST_PROXY = 'true';
 process.env.CORS_ORIGINS = 'http://localhost:8081';
 // La web (Next) manda la IP del visitante firmada con este secreto.

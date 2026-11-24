@@ -12,7 +12,7 @@ import { forwardedClientIp } from './shared/http/client-ip.policy';
 export function configureApp(app: INestApplication): void {
   const config = app.get<ConfigService<Env, true>>(ConfigService);
 
-  // Detrás del proxy de Render: la IP real viene en X-Forwarded-For (un salto).
+  // Detrás de Caddy (AWS): la IP real viene en X-Forwarded-For (un salto).
   if (config.get('TRUST_PROXY', { infer: true })) {
     (app as NestExpressApplication).set('trust proxy', 1);
   }

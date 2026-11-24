@@ -6,6 +6,4 @@ out/
 .env
 .env.local
 *.log
-data/
-bot-cobros-codi.zip
 *.pdf

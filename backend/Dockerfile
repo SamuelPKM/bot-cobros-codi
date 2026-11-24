@@ -1,5 +1,5 @@
-# Imagen de la API (NestJS). La usa la instalación en AWS (docs/deploy-aws.md);
-# Render no la necesita. Toda la configuración llega por variables de entorno.
+# Imagen de la API (NestJS) para la instalación en AWS (docs/deploy-aws.md).
+# Toda la configuración llega por variables de entorno.
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -17,5 +17,5 @@ USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
-# Corre las migraciones pendientes y arranca (lo mismo que start:render).
+# Corre las migraciones pendientes y arranca.
 CMD ["sh", "-c", "node node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js && exec node dist/main"]

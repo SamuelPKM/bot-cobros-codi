@@ -85,9 +85,9 @@ describe('validateEnv', () => {
     expect(
       validateEnv({
         ...base,
-        PUBLIC_BASE_URL: 'https://cobrale-api.onrender.com/',
+        PUBLIC_BASE_URL: 'https://api.cobrale.example.com/',
       }).PUBLIC_BASE_URL,
-    ).toBe('https://cobrale-api.onrender.com');
+    ).toBe('https://api.cobrale.example.com');
     expect(() =>
       validateEnv({ ...base, PUBLIC_BASE_URL: 'http://inseguro.com' }),
     ).toThrow('PUBLIC_BASE_URL');

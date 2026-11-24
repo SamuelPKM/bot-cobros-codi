@@ -11,7 +11,7 @@ cd front/web
 npm install
 cp .env.example .env.local
 npm run dev          # http://localhost:3001
-# producción local: npm run build && PORT=3001 npm start (en Render, PORT lo pone la plataforma)
+# producción local: npm run build && PORT=3001 npm start (en AWS corre en Docker, ver ../../docs/deploy-aws.md)
 ```
 
 En el backend, `FRONTEND_URL=http://localhost:3001` para que las ligas (invitaciones, regreso del pago) apunten aquí.

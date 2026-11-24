@@ -2,7 +2,7 @@ import { isIP } from 'node:net';
 
 /**
  * IP del visitante a partir de X-Forwarded-For. Se toma la ÚLTIMA entrada:
- * es la que agregó el proxy de la plataforma (Render, etc.); las anteriores
+ * es la que agregó el proxy de la plataforma (Caddy en AWS); las anteriores
  * las pudo escribir el propio visitante. null si no hay una IP válida.
  */
 export function clientIpFrom(forwardedFor: string | null): string | null {
