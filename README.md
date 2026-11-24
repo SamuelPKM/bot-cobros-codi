@@ -68,7 +68,10 @@ Sin `DATABASE_URL`, Cóbrale usa PGlite (Postgres dentro de Node) y guarda en `d
 
 ## Despliegue
 
-En Render, con Postgres en Neon: [docs/deploy-render.md](docs/deploy-render.md).
+- **AWS**, en una instancia EC2 con Docker y HTTPS automático, todo desde CloudShell: [docs/deploy-aws.md](docs/deploy-aws.md).
+- **Render**, con plan gratis: [docs/deploy-render.md](docs/deploy-render.md).
+
+En los dos casos los datos viven en Postgres (Neon).
 
 ## Conectar WhatsApp
 
@@ -108,6 +111,7 @@ Esa base se vacía en cada prueba: usa una base propia para pruebas.
 | `src/command.js`, `src/clabe.js`, `src/messages.js` | Comandos del chat, validación de CLABE y textos |
 | `src/config.js`, `src/server.js` | Variables de entorno y arranque |
 | `scripts/` | `push.js` y `tx.js` (terminal) y `check.js` (`npm run build`) |
+| `Dockerfile`, `deploy/aws/` | Imagen de la app y guiones para instalarla y operarla en AWS |
 
 ## Decisiones
 

@@ -1,0 +1,6 @@
+# HTTPS automático para Cóbrale. Caddy pide y renueva el certificado solo
+# (Let's Encrypt, o ZeroSSL si aquel falla) para el dominio de SITE_DOMAIN.
+{$SITE_DOMAIN} {
+	encode gzip
+	reverse_proxy cobrale-app:3000
+}

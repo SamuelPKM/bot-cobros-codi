@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Borra TODO lo que creó crear.sh: instancia, IP elástica, grupo de seguridad,
+# rol de IAM y los parámetros /cobrale. No toca la base de Neon.
+# Pide escribir "borrar cobrale" para confirmar.
+set -euo pipefail
+# shellcheck source=deploy/aws/comun.sh
+source "$(dirname "$0")/comun.sh"
+
+read -rp "Esto borra el servidor de Cóbrale en $REGION y su configuración. Escribe \"borrar cobrale\" para seguir: " ok
+[[ "$ok" == "borrar cobrale" ]] || die "cancelado"
+
+ids="$(aws ec2 describe-instances --filters "Name=tag:Name,Values=$NAME" \
+  "Name=instance-state-name,Values=pending,running,stopping,stopped" --query 'Reservations[].Instances[].InstanceId' --output text)"
+if [[ -n "$ids" ]]; then
+  say "Terminando $ids"
+  # shellcheck disable=SC2086
+  aws ec2 terminate-instances --instance-ids $ids >/dev/null
+  # shellcheck disable=SC2086
+  aws ec2 wait instance-terminated --instance-ids $ids
+fi
+alloc="$(aws ec2 describe-addresses --filters "Name=tag:Name,Values=$NAME" --query 'Addresses[0].AllocationId' --output text)"
+if [[ "$alloc" != None && -n "$alloc" ]]; then say "Liberando la IP elástica"; aws ec2 release-address --allocation-id "$alloc"; fi
+sg="$(aws ec2 describe-security-groups --filters "Name=group-name,Values=$NAME-web" --query 'SecurityGroups[0].GroupId' --output text)"
+if [[ "$sg" != None && -n "$sg" ]]; then say "Borrando el grupo de seguridad"; aws ec2 delete-security-group --group-id "$sg"; fi
+if aws iam get-instance-profile --instance-profile-name "$NAME-ec2" >/dev/null 2>&1; then
+  say "Borrando el rol de IAM"
+  aws iam remove-role-from-instance-profile --instance-profile-name "$NAME-ec2" --role-name "$NAME-ec2" || true
+  aws iam delete-instance-profile --instance-profile-name "$NAME-ec2"
+fi
+if aws iam get-role --role-name "$NAME-ec2" >/dev/null 2>&1; then
+  aws iam delete-role-policy --role-name "$NAME-ec2" --policy-name leer-configuracion || true
+  aws iam detach-role-policy --role-name "$NAME-ec2" --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore || true
+  aws iam delete-role --role-name "$NAME-ec2"
+fi
+names="$(aws ssm get-parameters-by-path --path "$PREFIX" --recursive --query 'Parameters[].Name' --output text)"
+if [[ -n "$names" ]]; then
+  say "Borrando los parámetros de $PREFIX"
+  # shellcheck disable=SC2086
+  printf '%s\n' $names | xargs -n 10 aws ssm delete-parameters --names >/dev/null
+fi
+say "Listo. La base de Neon sigue intacta."
