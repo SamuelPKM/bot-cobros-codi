@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Role } from '@/shared/interfaces/public-user.interface';
 import { Avatar } from '@/shared/ui/avatar';
+import { logoUrl } from '../constants/logo.constants';
 
 const TIME_ZONE = 'America/Mexico_City';
 
@@ -23,6 +24,8 @@ const longDate = new Intl.DateTimeFormat('es-MX', {
 
 interface BusinessHeaderProps {
   businessName: string;
+  /** Versión del logo; null para mostrar las iniciales. */
+  logoVersion: string | null;
   userName: string;
   role: Role;
   /** La hora de la visita (la calcula la página, en cada visita). */
@@ -30,7 +33,7 @@ interface BusinessHeaderProps {
 }
 
 /** Cabecera del panel: el negocio con su avatar, el saludo y el botón de cobrar. */
-export function BusinessHeader({ businessName, userName, role, now }: BusinessHeaderProps) {
+export function BusinessHeader({ businessName, logoVersion, userName, role, now }: BusinessHeaderProps) {
   const firstName = userName.trim().split(/\s+/)[0];
   const date = longDate.format(now);
 
@@ -42,7 +45,13 @@ export function BusinessHeader({ businessName, userName, role, now }: BusinessHe
       </div>
       <div className="relative flex flex-wrap items-center justify-between gap-5">
         <div className="flex min-w-0 items-center gap-4">
-          <Avatar name={businessName} size={64} tone="brand" className="ring-4 ring-white/10" />
+          <Avatar
+            name={businessName}
+            src={logoVersion ? logoUrl(logoVersion) : null}
+            size={64}
+            tone="brand"
+            className="ring-4 ring-white/10"
+          />
           <div className="min-w-0">
             <p className="text-sm text-emerald-100/80">
               {greeting(now)}, {firstName} · <span className="first-letter:uppercase">{date}</span>

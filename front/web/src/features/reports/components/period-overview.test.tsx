@@ -9,6 +9,7 @@ const day = (date: string, amount: number, count: number) => ({ date, amount, co
 
 const overview: ReportOverview = {
   businessName: 'Tacos La Esquina',
+  logoVersion: null,
   days: 7,
   from: '2026-11-18',
   to: '2026-11-24',

@@ -27,7 +27,18 @@ describe('validateEnv', () => {
       FRONT_PROXY_SECRET: undefined,
       WHATSAPP: null,
       DEMO: null,
+      LOGO_BUCKET: undefined,
+      AWS_REGION: 'us-east-2',
     });
+  });
+
+  it('acepta un bucket de logos válido y rechaza un nombre que no lo es', () => {
+    expect(
+      validateEnv({ ...base, LOGO_BUCKET: 'cobrale-logos-123' }).LOGO_BUCKET,
+    ).toBe('cobrale-logos-123');
+    expect(() => validateEnv({ ...base, LOGO_BUCKET: 'Mi Bucket' })).toThrow(
+      'LOGO_BUCKET',
+    );
   });
 
   it('WhatsApp es opcional, pero se configura completo o nada', () => {

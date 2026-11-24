@@ -41,6 +41,8 @@ export interface MethodTotal {
 /** Resumen de un periodo para el panel. Montos en pesos. */
 export interface ReportOverview {
   businessName: string;
+  /** Versión del logo del negocio (GET /businesses/me/logo); null sin logo. */
+  logoVersion: string | null;
   days: number;
   /** YYYY-MM-DD, ambos incluidos, en la Ciudad de México. */
   from: string;

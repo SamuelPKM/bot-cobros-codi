@@ -17,11 +17,25 @@ interface AvatarProps {
   size?: number;
   /** `brand`: degradado de la marca (el negocio). `neutral`: gris (personas). */
   tone?: 'brand' | 'neutral';
+  /** Imagen (el logo del negocio). Sin ella, las iniciales. */
+  src?: string | null;
   className?: string;
 }
 
-/** Avatar con iniciales. Decorativo: el nombre siempre va escrito al lado. */
-export function Avatar({ name, size = 40, tone = 'neutral', className }: AvatarProps) {
+/** Avatar con imagen o iniciales. Decorativo: el nombre siempre va escrito al lado. */
+export function Avatar({ name, size = 40, tone = 'neutral', src, className }: AvatarProps) {
+  if (src)
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- imagen privada, servida por /panel/logo con la sesión
+      <img
+        src={src}
+        alt=""
+        width={size}
+        height={size}
+        className={`shrink-0 rounded-full bg-white object-cover ${className ?? ''}`}
+        style={{ width: size, height: size }}
+      />
+    );
   const toneClass =
     tone === 'brand'
       ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm shadow-emerald-900/20'

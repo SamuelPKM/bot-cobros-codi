@@ -46,6 +46,10 @@ export interface Env {
   WHATSAPP: WhatsAppConfig | null;
   /** Demo pública: cobra con la API key de un negocio de demostración del equipo. null = apagada. */
   DEMO: DemoConfig | null;
+  /** Bucket privado de S3 para los logos. Sin él, la API funciona sin logos. */
+  LOGO_BUCKET: string | undefined;
+  /** Región de AWS del bucket (AWS_REGION; us-east-2 por defecto). */
+  AWS_REGION: string;
 }
 
 export interface DemoConfig {
@@ -163,6 +167,11 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     };
   }
 
+  // Nombres de bucket de S3: 3-63 caracteres, minúsculas, números, puntos y guiones.
+  const logoBucket = text(raw.LOGO_BUCKET);
+  if (logoBucket && !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(logoBucket))
+    errors.push('LOGO_BUCKET debe ser el nombre de un bucket de S3');
+
   if (errors.length > 0) {
     throw new Error(
       `Configuración inválida (revisa tu .env):\n- ${errors.join('\n- ')}`,
@@ -198,5 +207,7 @@ export function validateEnv(raw: Record<string, unknown>): Env {
           }
         : null,
     DEMO: demo,
+    LOGO_BUCKET: logoBucket,
+    AWS_REGION: text(raw.AWS_REGION) ?? 'us-east-2',
   };
 }

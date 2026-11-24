@@ -42,7 +42,13 @@ async function PanelContent({ searchParams }: Pick<PageProps<'/panel'>, 'searchP
 
   return (
     <>
-      <BusinessHeader businessName={overview.businessName} userName={user.name} role={user.role} now={now} />
+      <BusinessHeader
+        businessName={overview.businessName}
+        logoVersion={overview.logoVersion}
+        userName={user.name}
+        role={user.role}
+        now={now}
+      />
       {business && <WebhookReminder business={business} />}
       <TodaySummary summary={summary} />
       <PeriodOverview overview={overview} />

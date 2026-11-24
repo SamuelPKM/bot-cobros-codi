@@ -16,8 +16,17 @@ export interface ApiRequestOptions {
   token?: string;
   /** Headers solo de esta llamada (p. ej. X-Demo-Session). */
   headers?: Record<string, string>;
-  /** 'text' para el CSV: el cuerpo tal cual, con su BOM. Por defecto JSON. */
-  responseType?: 'json' | 'text';
+  /**
+   * 'text' para el CSV: el cuerpo tal cual, con su BOM. 'binary' para una
+   * imagen: { body, contentType }. Por defecto JSON.
+   */
+  responseType?: 'json' | 'text' | 'binary';
+}
+
+/** Respuesta de una llamada con responseType 'binary'. */
+export interface BinaryResponse {
+  body: ArrayBuffer;
+  contentType: string;
 }
 
 export interface ApiClientOptions {
@@ -36,12 +45,15 @@ export function createApiClient({ baseUrl, fetch, headers: fixed = {} }: ApiClie
 
   async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
     const asText = options.responseType === 'text';
+    const asBinary = options.responseType === 'binary';
+    // Un FormData (archivo) viaja tal cual: fetch pone su propio content-type multipart.
+    const isForm = options.body instanceof FormData;
     const headers = new Headers({
       ...fixed,
       ...options.headers,
-      accept: asText ? 'text/csv' : 'application/json',
+      accept: asText ? 'text/csv' : asBinary ? 'image/*' : 'application/json',
     });
-    if (options.body !== undefined) headers.set('content-type', 'application/json');
+    if (options.body !== undefined && !isForm) headers.set('content-type', 'application/json');
     if (options.token) headers.set('authorization', `Bearer ${options.token}`);
 
     let response: Response;
@@ -49,7 +61,12 @@ export function createApiClient({ baseUrl, fetch, headers: fixed = {} }: ApiClie
       response = await fetch(`${root}${path}`, {
         method: options.method ?? 'GET',
         headers,
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body:
+          options.body === undefined
+            ? undefined
+            : isForm
+              ? (options.body as FormData)
+              : JSON.stringify(options.body),
         cache: 'no-store',
       });
     } catch {
@@ -57,6 +74,11 @@ export function createApiClient({ baseUrl, fetch, headers: fixed = {} }: ApiClie
     }
 
     if (response.status === 204) return null as T;
+    if (asBinary && response.ok)
+      return {
+        body: await response.arrayBuffer(),
+        contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+      } satisfies BinaryResponse as T;
     if (asText && response.ok)
       // TextDecoder con ignoreBOM conserva el BOM, que Excel necesita para leer los acentos.
       return new TextDecoder('utf-8', { ignoreBOM: true }).decode(await response.arrayBuffer()) as T;

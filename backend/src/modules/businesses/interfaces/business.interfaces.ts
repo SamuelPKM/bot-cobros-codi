@@ -22,6 +22,10 @@ export interface PublicBusiness {
   webhookConfigured: boolean;
   /** URL que el admin registra en el portal de pey. */
   webhookUrl: string;
+  /** Cambia con cada logo nuevo (para no mostrar uno viejo de caché); null sin logo. */
+  logoVersion: string | null;
+  /** false si el servidor no tiene dónde guardar logos (sin LOGO_BUCKET). */
+  logosEnabled: boolean;
 }
 
 /** Lo necesario para cobrar a nombre de un negocio. */

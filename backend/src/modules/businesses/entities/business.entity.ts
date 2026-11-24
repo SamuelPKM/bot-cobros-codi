@@ -40,6 +40,10 @@ export class Business {
   @Column({ name: 'webhook_slug', type: 'text', unique: true })
   webhookSlug!: string;
 
+  /** Llave del logo en S3 (logos/<id>/<aleatorio>.<ext>); null sin logo. */
+  @Column({ name: 'logo_key', type: 'text', nullable: true })
+  logoKey!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

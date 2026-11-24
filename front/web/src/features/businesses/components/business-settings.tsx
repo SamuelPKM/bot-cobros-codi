@@ -1,6 +1,7 @@
 import { CopyButton } from '@/shared/ui/copy-button';
 import type { PublicBusiness } from '../interfaces/public-business.interface';
 import { BusinessSettingForm } from './business-setting-form';
+import { LogoSettings } from './logo-settings';
 
 /** Ajustes del negocio (solo admin): nombre, API key de pey y webhook. */
 export function BusinessSettings({ business }: { business: PublicBusiness }) {
@@ -9,6 +10,12 @@ export function BusinessSettings({ business }: { business: PublicBusiness }) {
       <h2 id="business-title" className="text-lg font-semibold text-zinc-900">
         Negocio
       </h2>
+
+      <LogoSettings
+        businessName={business.name}
+        logoVersion={business.logoVersion}
+        enabled={business.logosEnabled}
+      />
 
       <BusinessSettingForm
         section="name"

@@ -33,6 +33,12 @@ alloc="$(aws ec2 describe-addresses --filters "Name=tag:Name,Values=$NAME" --que
 if [[ "$alloc" != None && -n "$alloc" ]]; then say "Liberando la IP elástica"; aws ec2 release-address --allocation-id "$alloc"; fi
 sg="$(aws ec2 describe-security-groups --filters "Name=group-name,Values=$NAME-web" --query 'SecurityGroups[0].GroupId' --output text)"
 if [[ "$sg" != None && -n "$sg" ]]; then say "Borrando el grupo de seguridad"; aws ec2 delete-security-group --group-id "$sg"; fi
+logo_bucket="$NAME-logos-$(aws sts get-caller-identity --query Account --output text)"
+if aws s3api head-bucket --bucket "$logo_bucket" >/dev/null 2>&1; then
+  say "Borrando los logos y su bucket"
+  aws s3 rm "s3://$logo_bucket" --recursive >/dev/null
+  aws s3api delete-bucket --bucket "$logo_bucket"
+fi
 if aws iam get-instance-profile --instance-profile-name "$NAME-ec2" >/dev/null 2>&1; then
   say "Borrando el rol de IAM"
   aws iam remove-role-from-instance-profile --instance-profile-name "$NAME-ec2" --role-name "$NAME-ec2" || true
@@ -40,6 +46,7 @@ if aws iam get-instance-profile --instance-profile-name "$NAME-ec2" >/dev/null 2
 fi
 if aws iam get-role --role-name "$NAME-ec2" >/dev/null 2>&1; then
   aws iam delete-role-policy --role-name "$NAME-ec2" --policy-name leer-configuracion || true
+  aws iam delete-role-policy --role-name "$NAME-ec2" --policy-name logos || true
   aws iam detach-role-policy --role-name "$NAME-ec2" --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore || true
   aws iam delete-role --role-name "$NAME-ec2"
 fi

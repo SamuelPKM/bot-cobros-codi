@@ -15,6 +15,8 @@ export interface MethodTotal {
 
 export interface ReportOverview {
   businessName: string;
+  /** Versión del logo del negocio; null sin logo. */
+  logoVersion: string | null;
   days: number;
   from: string;
   to: string;

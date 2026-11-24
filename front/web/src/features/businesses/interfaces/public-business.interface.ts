@@ -6,4 +6,8 @@ export interface PublicBusiness {
   webhookConfigured: boolean;
   /** URL que el admin registra en el portal de pey. */
   webhookUrl: string;
+  /** Cambia con cada logo nuevo; null sin logo. */
+  logoVersion: string | null;
+  /** false si el servidor no tiene dónde guardar logos. */
+  logosEnabled: boolean;
 }

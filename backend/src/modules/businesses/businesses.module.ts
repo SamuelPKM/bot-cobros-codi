@@ -9,7 +9,13 @@ import { UsersModule } from '../users/users.module';
 import { BUSINESS_SECRET_BOX } from './constants/businesses.constants';
 import { BusinessesController } from './controllers/businesses.controller';
 import { Business } from './entities/business.entity';
+import { BusinessLogoService } from './services/business-logo.service';
 import { BusinessesService } from './services/businesses.service';
+import {
+  DisabledLogoStorage,
+  LogoStorage,
+  S3LogoStorage,
+} from './storage/logo-storage';
 
 @Module({
   imports: [
@@ -21,6 +27,17 @@ import { BusinessesService } from './services/businesses.service';
   controllers: [BusinessesController],
   providers: [
     BusinessesService,
+    BusinessLogoService,
+    {
+      provide: LogoStorage,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => {
+        const bucket = config.get('LOGO_BUCKET', { infer: true });
+        return bucket
+          ? new S3LogoStorage(bucket, config.get('AWS_REGION', { infer: true }))
+          : new DisabledLogoStorage();
+      },
+    },
     {
       provide: BUSINESS_SECRET_BOX,
       inject: [ConfigService],
@@ -28,6 +45,6 @@ import { BusinessesService } from './services/businesses.service';
         new SecretBox(config.get('ENCRYPTION_KEY', { infer: true })),
     },
   ],
-  exports: [BusinessesService],
+  exports: [BusinessesService, BusinessLogoService],
 })
 export class BusinessesModule {}

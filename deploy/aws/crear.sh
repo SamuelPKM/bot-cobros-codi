@@ -127,6 +127,26 @@ aws iam put-role-policy --role-name "$NAME-ec2" --policy-name leer-configuracion
     \"Resource\": [\"arn:aws:ssm:$REGION:$ACCOUNT:parameter$PREFIX\", \"arn:aws:ssm:$REGION:$ACCOUNT:parameter$PREFIX/*\"]
   }]
 }"
+# Logos de los negocios: bucket privado (sin acceso público), cifrado, y el
+# servidor solo puede leer, escribir y borrar dentro de logos/.
+LOGO_BUCKET="$NAME-logos-$ACCOUNT"
+if ! aws s3api head-bucket --bucket "$LOGO_BUCKET" >/dev/null 2>&1; then
+  aws s3api create-bucket --bucket "$LOGO_BUCKET" --region "$REGION" \
+    --create-bucket-configuration "LocationConstraint=$REGION" >/dev/null
+  aws s3api put-public-access-block --bucket "$LOGO_BUCKET" --public-access-block-configuration \
+    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+  aws s3api put-bucket-tagging --bucket "$LOGO_BUCKET" --tagging "TagSet=[{Key=Name,Value=$NAME}]"
+fi
+aws iam put-role-policy --role-name "$NAME-ec2" --policy-name logos --policy-document "{
+  \"Version\": \"2012-10-17\",
+  \"Statement\": [{
+    \"Effect\": \"Allow\",
+    \"Action\": [\"s3:GetObject\", \"s3:PutObject\", \"s3:DeleteObject\"],
+    \"Resource\": \"arn:aws:s3:::$LOGO_BUCKET/logos/*\"
+  }]
+}"
+put api/LOGO_BUCKET "$LOGO_BUCKET" String
+put api/AWS_REGION "$REGION" String
 if ! aws iam get-instance-profile --instance-profile-name "$NAME-ec2" >/dev/null 2>&1; then
   aws iam create-instance-profile --instance-profile-name "$NAME-ec2" >/dev/null
   aws iam add-role-to-instance-profile --instance-profile-name "$NAME-ec2" --role-name "$NAME-ec2"
@@ -194,7 +214,7 @@ USER_DATA="$(cat "$(dirname "$0")/servidor/primer-arranque.sh")"
 
 INSTANCE="$(aws ec2 run-instances --image-id "$AMI" --instance-type "$INSTANCE_TYPE" \
   --iam-instance-profile "Name=$NAME-ec2" --security-group-ids "$SG" \
-  --metadata-options HttpTokens=required,HttpEndpoint=enabled \
+  --metadata-options HttpTokens=required,HttpEndpoint=enabled,HttpPutResponseHopLimit=2 \
   --block-device-mappings 'DeviceName=/dev/xvda,Ebs={VolumeSize=16,VolumeType=gp3,Encrypted=true}' \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$NAME}]" "ResourceType=volume,Tags=[{Key=Name,Value=$NAME}]" \
   --user-data "$USER_DATA" --query 'Instances[0].InstanceId' --output text)"

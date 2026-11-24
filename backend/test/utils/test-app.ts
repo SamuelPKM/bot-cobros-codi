@@ -16,6 +16,8 @@ import { FakeExpoPushClient } from '../fakes/fake-expo-push-client';
 import { FakeWhatsAppClient } from '../fakes/fake-whatsapp-client';
 import type { FakePeyClient } from '../fakes/fake-pey-client';
 import { FakePeyClientFactory } from '../fakes/fake-pey-client-factory';
+import { FakeLogoStorage } from '../fakes/fake-logo-storage';
+import { LogoStorage } from '../../src/modules/businesses/storage/logo-storage';
 
 export interface TestApp {
   app: INestApplication;
@@ -27,6 +29,8 @@ export interface TestApp {
   expo: FakeExpoPushClient;
   /** WhatsApp Cloud API simulado. */
   whatsapp: FakeWhatsAppClient;
+  /** Bucket de logos en memoria. */
+  logos: FakeLogoStorage;
 }
 
 /**
@@ -48,6 +52,7 @@ export async function createTestApp(): Promise<TestApp> {
   const peyFactory = new FakePeyClientFactory();
   const expo = new FakeExpoPushClient();
   const whatsapp = new FakeWhatsAppClient();
+  const logos = new FakeLogoStorage();
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
@@ -57,11 +62,13 @@ export async function createTestApp(): Promise<TestApp> {
     .useValue(expo)
     .overrideProvider(WhatsAppClient)
     .useValue(whatsapp)
+    .overrideProvider(LogoStorage)
+    .useValue(logos)
     .compile();
   const app = moduleRef.createNestApplication({ rawBody: true });
   configureApp(app);
   await app.init();
-  return { app, pey: peyFactory.client, peyFactory, expo, whatsapp };
+  return { app, pey: peyFactory.client, peyFactory, expo, whatsapp, logos };
 }
 
 /** Olvida los intentos contados por los límites (cada prueba empieza de cero). */

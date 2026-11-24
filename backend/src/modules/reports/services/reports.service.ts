@@ -14,6 +14,7 @@ import type {
   PersonSummary,
   ReportOverview,
 } from '../interfaces/report.interfaces';
+import { logoVersion } from '../../businesses/policies/logo-image.policy';
 import { toCsv } from '../policies/csv.policy';
 import {
   byMethod,
@@ -117,8 +118,8 @@ export class ReportsService {
           GROUP BY 1 ORDER BY count(*) DESC, 1 LIMIT 1`,
         [...scope, range.from, range.to],
       ),
-      this.dataSource.query<{ name: string }[]>(
-        `SELECT name FROM businesses WHERE id = $1`,
+      this.dataSource.query<{ name: string; logo_key: string | null }[]>(
+        `SELECT name, logo_key FROM businesses WHERE id = $1`,
         [user.businessId],
       ),
     ]);
@@ -132,6 +133,7 @@ export class ReportsService {
 
     return {
       businessName: business[0]?.name ?? '',
+      logoVersion: logoVersion(business[0]?.logo_key ?? null),
       days,
       from: range.from,
       to: range.to,

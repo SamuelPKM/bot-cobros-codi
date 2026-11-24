@@ -15,6 +15,7 @@ Todo se hace desde **AWS CloudShell**, la terminal que trae la consola de AWS en
 | URLs | Web en `https://<ip>.sslip.io` y API en `https://api.<ip>.sslip.io` (gratis, sin comprar dominio), o tu propio dominio |
 | Base de datos | Postgres en RDS (`db.t4g.micro`, 20 GB, cifrada, sin acceso público: solo la alcanza el servidor). La contraseña se genera sola y queda en `DATABASE_URL`. Con `DB=neon`, Postgres en Neon |
 | Secretos | SSM Parameter Store, cifrados, bajo `/cobrale/...` |
+| Logos de los negocios | Bucket privado de S3 `cobrale-logos-<cuenta>` (sin acceso público, cifrado). La API lo usa con el rol de la instancia, solo dentro de `logos/`; la web los sirve en `/panel/logo` con la sesión |
 | Acceso al servidor | Session Manager y Run Command de SSM. El firewall solo abre 80 y 443 |
 
 ## Qué instancia elegir
