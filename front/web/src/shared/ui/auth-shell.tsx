@@ -33,6 +33,11 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
             {children}
           </div>
           {footer && <div className="mt-6 text-center text-sm text-zinc-600">{footer}</div>}
+          <p className="mt-4 text-center text-xs text-zinc-500">
+            <Link href="/privacidad" className="hover:text-zinc-700 hover:underline">
+              Aviso de privacidad
+            </Link>
+          </p>
         </div>
       </main>
     </div>

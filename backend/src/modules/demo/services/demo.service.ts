@@ -35,7 +35,7 @@ const sha256 = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 const SESSION_ID = /^[a-f0-9]{32}$/;
 /** Comandos que crean un cobro con pey (cuentan para el límite por hora). */
-const CREATES_CHARGE = new Set(['confirm', 'qr', 'link']);
+const CREATES_CHARGE = new Set(['qr', 'link']);
 
 interface ActiveSession {
   hash: string;
@@ -138,6 +138,11 @@ export class DemoService {
   private async reply(user: User, text: string): Promise<ConversationReply[]> {
     const { config } = await this.demo();
     try {
+      // Sin push en la demo pública: cualquiera podría mandar una solicitud de
+      // pago al celular de otra persona (cobro no solicitado, regla 7 del
+      // hackatón). QR y liga solo los ve quien los pide.
+      if (parseMessage(text).type === 'charge')
+        return [{ text: demoTexts.pushDisabled() }];
       if (
         CREATES_CHARGE.has(parseMessage(text).type) &&
         (await this.chargesLastHour(user.id)) >= config.chargesPerHour

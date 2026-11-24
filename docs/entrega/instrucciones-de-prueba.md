@@ -33,9 +33,7 @@ Abre [URL]/demo. Escribes como lo harías por WhatsApp:
 
 | Escribe | Qué pasa |
 | --- | --- |
-| `cobra 0.01 a <tu celular> prueba` | Muestra el cobro y pide confirmación |
-| `sí` | Te llega la solicitud a tu banco; al pagar aparece "✅ Pagado" en el chat |
-| `qr 0.01 prueba` | Muestra un QR para escanear |
+| `qr 0.01 prueba` | Muestra un QR para escanear; al pagar aparece "✅ Pagado" en el chat |
 | `liga 0.01 prueba` | Da una liga de pago |
 | `liga` | La liga de tu último cobro pendiente |
 | `resumen` | Lo cobrado hoy y lo pendiente |
@@ -43,11 +41,13 @@ Abre [URL]/demo. Escribes como lo harías por WhatsApp:
 
 Cada visitante tiene su propia conversación: nadie ve ni confirma los cobros de otro.
 
+La demo pública **no manda cobros push** (`cobra 0.01 a <celular>` responde que no está disponible): como no pide cuenta, cualquiera podría mandarle una solicitud de pago al celular de otra persona. El cobro al celular se prueba en el panel con la cuenta de prueba (sección A, paso 2) o por WhatsApp.
+
 ## Qué más puedes probar
 
 - Un monto mayor a $1.00: se rechaza con el tope.
 - Un teléfono con lada o espacios (`+52 55 1234 5678`): se entiende igual.
-- Enviar dos veces "sí": no se manda un segundo cobro.
+- Por WhatsApp, enviar dos veces "sí": no se manda un segundo cobro.
 - Abrir el enlace de un cobro de otro negocio, o de otro vendedor siendo vendedor: no se muestra.
 - Como vendedor, abrir `/panel/equipo`: te regresa al panel.
 - Quitarle el rol de administrador al único que queda: no se permite.

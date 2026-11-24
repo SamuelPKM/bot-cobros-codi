@@ -20,7 +20,12 @@ export default function InicioPage() {
           Probar la demo
         </Link>
       </div>
-      <p className="text-xs text-zinc-500">No es un producto oficial de pey ni de Banco de México.</p>
+      <p className="text-xs text-zinc-500">
+        No es un producto oficial de pey ni de Banco de México. ·{' '}
+        <Link href="/privacidad" className="underline hover:text-zinc-700">
+          Aviso de privacidad
+        </Link>
+      </p>
     </main>
   );
 }

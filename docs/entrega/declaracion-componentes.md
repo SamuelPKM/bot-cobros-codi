@@ -28,6 +28,10 @@ Desde el 14 de noviembre de 2026:
 - Demo web pública con límites de uso y una sesión aislada por visitante.
 - Web nueva en Next.js: registro, entrar, panel, nuevo cobro con plan B y pago en vivo, equipo, ajustes, invitaciones, demo y páginas de regreso del pago.
 - Pruebas automáticas de todo lo anterior (unitarias y de extremo a extremo contra Postgres).
+- Instalación en AWS: servidor EC2 con la API y la web en Docker detrás de Caddy, base de datos en Amazon RDS (Postgres), configuración cifrada en SSM Parameter Store y guiones para crear, actualizar y borrar todo.
+- Identidad visual: logo de Cóbrale (dibujado en SVG por el equipo), pantallas de entrada y registro con ilustración de un cobro CoDi, y estilo de botones y campos.
+- Aviso de privacidad (`/privacidad`).
+- La demo pública dejó de mandar cobros push: como no pide cuenta, cualquiera podría mandar una solicitud de pago al celular de otra persona (regla 7, cobros no solicitados). En la demo se cobra con QR y liga; el push se prueba con la cuenta de prueba del panel.
 - [Agregar aquí lo que se haga después: primer cobro real, conexión con la app de Meta, prueba con un negocio, etc.]
 
 ## Componentes de terceros
@@ -47,16 +51,17 @@ Desde el 14 de noviembre de 2026:
 | [standardwebhooks](https://www.npmjs.com/package/standardwebhooks) | Verificar la firma de los webhooks de pey | MIT |
 | [qrcode](https://www.npmjs.com/package/qrcode) | Dibujar la imagen del QR CoDi | MIT |
 | [Jest](https://jestjs.io), [Vitest](https://vitest.dev) y [Testing Library](https://testing-library.com) | Pruebas automáticas | MIT |
-| [PostgreSQL](https://www.postgresql.org) 16 | Base de datos (Docker en desarrollo) | PostgreSQL License |
-| [Neon](https://neon.tech) | Postgres administrado (servicio) | Términos de Neon |
-| [Amazon Web Services](https://aws.amazon.com) (EC2, SSM Parameter Store) | Hospedaje de la API y la web, y resguardo cifrado de la configuración (servicio) | Términos de AWS |
+| [PostgreSQL](https://www.postgresql.org) | Base de datos (16 en Docker para desarrollo; la versión de Amazon RDS en producción) | PostgreSQL License |
+| [Amazon Web Services](https://aws.amazon.com) (EC2, RDS, SSM Parameter Store) | Hospedaje de la API y la web, base de datos administrada y resguardo cifrado de la configuración (servicio) | Términos de AWS |
+| [Certificados de Amazon RDS](https://truststore.pki.rds.amazonaws.com) | Verificar el certificado TLS de la base de datos | Términos de AWS |
+| [Geist](https://vercel.com/font) (vía `next/font`) | Tipografía de la web | SIL Open Font License 1.1 |
 | [Docker](https://www.docker.com) | Contenedores de la API, la web y el proxy | Apache-2.0 |
 | [Caddy](https://caddyserver.com) | Proxy con HTTPS automático (Let's Encrypt) | Apache-2.0 |
 
 Las dependencias que estas librerías traen consigo están en `backend/package-lock.json` y `front/web/package-lock.json`.
 
-No se usaron diseños, contenidos ni productos de terceros además de los listados. El proyecto no se ha presentado en otros concursos.
+No se usaron diseños, imágenes, contenidos ni productos de terceros además de los listados: el logo y las ilustraciones están hechos en código por el equipo, sin fotos ni imágenes de bancos de imágenes. El proyecto no se ha presentado en otros concursos.
 
 ## Herramientas de inteligencia artificial
 
-Parte del código y de la documentación se escribió con ayuda de un asistente de IA. Las reglas no exigen declararlo; se menciona por transparencia.
+Parte del código, del diseño (logo e ilustraciones) y de la documentación se hizo con ayuda de un asistente de IA. Las reglas no exigen declararlo; se menciona por transparencia.

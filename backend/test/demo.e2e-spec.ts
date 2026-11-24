@@ -72,10 +72,19 @@ describe('Demo pública (e2e)', () => {
       .map((m) => m.text)
       .join('\n');
 
-  async function payWebhook(transactionId: string) {
+  async function payQrWebhook(
+    codiQrId: string,
+    transactionId: string,
+    amount: number,
+  ) {
     const body = JSON.stringify({
-      type: 'codi.pn.payment_received',
+      type: 'codi.qr.payment_received',
+      codiQrId,
       transactionId,
+      amount,
+      datePaid: 1790725000,
+      metadata: {},
+      numRef: '1',
     });
     const at = new Date();
     await http
@@ -108,19 +117,25 @@ describe('Demo pública (e2e)', () => {
     expect(messages[0].text).toMatch(/Tacos Demo[\s\S]*\$1\.00/);
   });
 
-  it('cobro por push completo: confirmación, envío y "✅ Pagado" al consultar', async () => {
+  it('no manda cobros push: nadie puede cobrarle al celular de otra persona', async () => {
     const { sessionId } = await newSession();
-    const prompt = await say(sessionId, 'cobra 1 a 5598765432 prueba');
-    expect(prompt.map((m) => m.sender)).toEqual(['visitor', 'bot']);
-    expect(prompt[0].text).toBe('cobra 1 a 5598765432 prueba');
-    expect(botText(prompt)).toMatch(/Vas a cobrar \$1\.00/);
+    const reply = await say(sessionId, 'cobra 1 a 5598765432 prueba');
+    expect(reply.map((m) => m.sender)).toEqual(['visitor', 'bot']);
+    expect(botText(reply)).toMatch(/no se mandan cobros al celular/);
     expect(botText(await say(sessionId, 'sí'))).toMatch(
-      /Listo, envié el cobro/,
+      /No tienes ningún cobro por confirmar/,
     );
-    expect(peyFactory.keysUsedFor('createPush')).toEqual(['pey_key_demo_dddd']);
+    expect(pey.pushes).toHaveLength(0);
+  });
 
-    pey.pay('TX1', { trackingKey: 'RASTREO-DEMO' });
-    await payWebhook('TX1');
+  it('cobro por QR completo: QR, pago y "✅ Pagado" al consultar', async () => {
+    const { sessionId } = await newSession();
+    const [, bot] = await say(sessionId, 'qr 1 prueba');
+    expect(bot.text).toMatch(/QR para cobrar \$1\.00/);
+    expect(peyFactory.keysUsedFor('createQr')).toEqual(['pey_key_demo_dddd']);
+
+    const transactionId = pey.payQr('IDC1', { trackingKey: 'RASTREO-DEMO' });
+    await payQrWebhook('IDC1', transactionId, 1);
 
     const all = await http
       .get('/demo/messages')
@@ -129,9 +144,7 @@ describe('Demo pública (e2e)', () => {
     const messages = all.body.messages as DemoMessage[];
     const paid = messages.filter((m) => /✅ Pagado/.test(m.text));
     expect(paid).toHaveLength(1);
-    expect(paid[0].text).toMatch(
-      /\$1\.00 al 55 9876 5432 por "prueba"[\s\S]*RASTREO-DEMO/,
-    );
+    expect(paid[0].text).toMatch(/\$1\.00[\s\S]*RASTREO-DEMO/);
 
     // Solo lo nuevo con ?after, y el aviso no se repite.
     const last = messages.at(-1)!.id;

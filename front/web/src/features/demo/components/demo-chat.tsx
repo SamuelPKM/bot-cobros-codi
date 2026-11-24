@@ -153,7 +153,7 @@ export function DemoChat() {
           onChange={(event) => setText(event.target.value)}
           maxLength={300}
           autoComplete="off"
-          placeholder="cobra 0.01 a 5512345678 prueba"
+          placeholder="qr 0.01 prueba"
           className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 focus:ring-2 focus:ring-emerald-600"
         />
         <button type="submit" disabled={sending} className={primaryButton}>

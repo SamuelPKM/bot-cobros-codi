@@ -20,6 +20,13 @@ export default function RegistroPage() {
       }
     >
       <RegisterForm />
+      <p className="mt-4 text-xs text-zinc-500">
+        Al crear tu cuenta aceptas el{' '}
+        <Link href="/privacidad" className="underline hover:text-zinc-700">
+          aviso de privacidad
+        </Link>
+        .
+      </p>
     </AuthShell>
   );
 }
