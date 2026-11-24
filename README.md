@@ -11,6 +11,7 @@ No es un producto oficial de pey ni de Banco de México.
 | [backend/](backend/) | API en NestJS + TypeORM + PostgreSQL. Ver [backend/README.md](backend/README.md) |
 | [front/](front/) | Una carpeta por aplicación de front: [front/web](front/web/) (Next.js) y, más adelante, front/mobile (Expo) |
 | [docs/](docs/) | [Plan de la migración](docs/plan-nest-next.md) y documentos de entrega del hackatón |
+| [deploy/aws/](deploy/aws/) | Guiones para instalar y operar la API y la web en AWS (ver [docs/deploy-aws.md](docs/deploy-aws.md)) |
 
 ## Arranque rápido
 
@@ -34,4 +35,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Deploy de los dos servicios en Render y primer cobro real de $0.01: [backend/docs/deploy.md](backend/docs/deploy.md).
+Deploy y primer cobro real de $0.01:
+
+- **Render**, con los dos servicios del Blueprint: [backend/docs/deploy.md](backend/docs/deploy.md).
+- **AWS**, en una instancia EC2 siempre encendida, con Docker y HTTPS automático, todo desde CloudShell: [docs/deploy-aws.md](docs/deploy-aws.md).

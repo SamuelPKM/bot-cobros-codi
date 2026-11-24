@@ -1,0 +1,13 @@
+# HTTPS automático para Cóbrale. Caddy pide y renueva los certificados solo
+# (Let's Encrypt, o ZeroSSL si aquel falla).
+#   SITE_DOMAIN  la web (Next.js)
+#   API_DOMAIN   la API (NestJS): webhooks de pey y de Meta, y la app móvil
+{$SITE_DOMAIN} {
+	encode gzip
+	reverse_proxy cobrale-web:3001
+}
+
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy cobrale-api:3000
+}
