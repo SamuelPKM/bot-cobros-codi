@@ -226,6 +226,54 @@ describe('Negocios con su propia API key de pey (e2e)', () => {
       expect(res.body.business.peyApiKeyLast4).toBe('ueno');
     });
 
+    it('al cambiar la API key se borra el secreto del webhook anterior', async () => {
+      await http
+        .patch('/businesses/me')
+        .set('Authorization', `Bearer ${admin}`)
+        .send({ peyWebhookSecret: TEST_WEBHOOK_SECRET })
+        .expect(200);
+      const res = await http
+        .patch('/businesses/me')
+        .set('Authorization', `Bearer ${admin}`)
+        .send({ peyApiKey: 'pey_live_nueva_5678' })
+        .expect(200);
+      expect(res.body.business).toMatchObject({
+        peyApiKeyLast4: '5678',
+        webhookConfigured: false,
+      });
+    });
+
+    it('no cambia la API key mientras haya cobros en espera hechos con la actual', async () => {
+      await http
+        .post('/charges')
+        .set('Authorization', `Bearer ${admin}`)
+        .send({ phone: '5512345678', amount: 10 })
+        .expect(201);
+      peyFactory.calls.length = 0;
+      const res = await http
+        .patch('/businesses/me')
+        .set('Authorization', `Bearer ${admin}`)
+        .send({ peyApiKey: 'pey_live_nueva_5678' })
+        .expect(409);
+      expect(res.body.message).toMatch(/cobros en espera/);
+      expect(peyFactory.keysUsedFor('verifyApiKey')).toEqual([]);
+
+      // El nombre sí se puede cambiar, y la key en cuanto el cobro vence.
+      await http
+        .patch('/businesses/me')
+        .set('Authorization', `Bearer ${admin}`)
+        .send({ name: 'Tacos Ana Centro' })
+        .expect(200);
+      await db.query(
+        `UPDATE payment_attempts SET status = 'expired' WHERE status IN ('pending', 'unknown')`,
+      );
+      await http
+        .patch('/businesses/me')
+        .set('Authorization', `Bearer ${admin}`)
+        .send({ peyApiKey: 'pey_live_nueva_5678' })
+        .expect(200);
+    });
+
     it('un vendedor no ve ni cambia los datos del negocio', async () => {
       await http
         .get('/businesses/me')

@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
@@ -30,6 +31,8 @@ const INVALID_KEY =
   'La API key de pey no es válida. Revísala en portal.mipey.mx > Desarrollador';
 const PEY_UNAVAILABLE =
   'No pudimos validar tu API key con pey. Intenta de nuevo en unos minutos';
+const OPEN_CHARGES =
+  'Tienes cobros en espera hechos con tu API key actual. Espera a que se paguen o venzan para cambiarla';
 
 /**
  * Dueño de los negocios y de sus credenciales de pey. Las credenciales se
@@ -87,8 +90,17 @@ export class BusinessesService {
     const changes: Partial<Business> = {};
     if (input.name !== undefined) changes.name = input.name.trim();
     if (input.peyApiKey !== undefined) {
+      // Los cobros en espera se crearon con la key actual: pey solo los
+      // reconoce con ella (barrido) y avisa sus pagos firmando con el secreto
+      // de su webhook. Cambiarla los dejaría sin forma de confirmarse.
+      if ((await this.countOpenAttempts(businessId)) > 0) {
+        throw new ConflictException(OPEN_CHARGES);
+      }
       await this.assertValidApiKey(input.peyApiKey);
       Object.assign(changes, this.sealApiKey(input.peyApiKey));
+      // En pey el webhook es de cada API key: la nueva tiene su propio secreto.
+      // El anterior deja de valer, salvo que en la misma petición venga el nuevo.
+      changes.peyWebhookSecretSealed = null;
     }
     if (input.peyWebhookSecret !== undefined) {
       changes.peyWebhookSecretSealed = this.box.seal(input.peyWebhookSecret);
@@ -142,6 +154,17 @@ export class BusinessesService {
         ? this.box.open(business.peyWebhookSecretSealed)
         : null,
     };
+  }
+
+  /** Intentos de pago todavía vivos en pey (pendientes o en duda) de un negocio. */
+  private async countOpenAttempts(businessId: number): Promise<number> {
+    const [{ count }] = await this.dataSource.query<{ count: string }[]>(
+      `SELECT count(*) FROM payment_attempts a
+         JOIN charges c ON c.id = a.charge_id
+        WHERE c.business_id = $1 AND a.status IN ('pending', 'unknown')`,
+      [businessId],
+    );
+    return Number(count);
   }
 
   private clientFor(business: Business): PeyApi {
