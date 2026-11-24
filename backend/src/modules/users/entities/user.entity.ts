@@ -1,0 +1,45 @@
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import { ROLE_VALUES, type Role } from '../types/role.type';
+
+@Entity('users')
+export class User {
+  @PrimaryGeneratedColumn()
+  id!: number;
+
+  /** Negocio al que pertenece (sus cobros y su equipo). */
+  @Column({ name: 'business_id', type: 'integer' })
+  businessId!: number;
+
+  /** citext: "Ana" y "ana" son el mismo usuario. */
+  @Column({ type: 'citext', unique: true })
+  username!: string;
+
+  @Column({ type: 'text' })
+  name!: string;
+
+  @Column({ type: 'enum', enum: ROLE_VALUES, enumName: 'user_role' })
+  role!: Role;
+
+  /** Nunca sale en las respuestas: `select: false` y el mapper público no lo incluye. */
+  @Column({ name: 'password_hash', type: 'text', select: false })
+  passwordHash!: string;
+
+  @Column({ type: 'boolean', default: true })
+  active!: boolean;
+
+  /** Tope por cobro del vendedor, en centavos. null = sin tope propio. */
+  @Column({ name: 'max_amount_cents', type: 'integer', nullable: true })
+  maxAmountCents!: number | null;
+
+  /** Visitante de la demo pública: no inicia sesión ni aparece en el equipo. */
+  @Column({ name: 'demo_visitor', type: 'boolean', default: false })
+  demoVisitor!: boolean;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+}

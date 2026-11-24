@@ -6,7 +6,7 @@
 
 ## El problema
 
-Quien vive de su oficio (una barbería, una fonda, un plomero) cobra casi siempre en efectivo o con transferencias que revisa a mano. Las terminales cobran comisión y renta, y las apps de cobro piden instalar algo más. CoDi resuelve el pago (sin comisión, instantáneo, desde el banco), pero cobrar con CoDi todavía no es tan fácil como mandar un mensaje.
+Quien vive de su oficio (una barbería, una fonda, un plomero) cobra en efectivo o con transferencias que revisa a mano; las terminales cobran comisión y renta. CoDi resuelve el pago (sin comisión, instantáneo, desde el banco), pero cobrar con CoDi todavía no es tan fácil como mandar un mensaje.
 
 ## Qué hace
 
@@ -14,29 +14,30 @@ Cóbrale es un asistente de chat con una web sencilla detrás. El comerciante es
 
 > cobra 150 a 5512345678 corte de pelo
 
-El asistente le muestra el cobro, pide un "sí" y manda la solicitud de pago CoDi al celular del cliente. Cuando el cliente aprueba el pago en la app de su banco, el comerciante recibe "✅ Pagado", con la clave de rastreo de Banxico.
+El asistente le muestra el cobro, pide un "sí" y manda la solicitud de pago CoDi al celular del cliente. Cuando el cliente la aprueba en la app de su banco, el comerciante recibe "✅ Pagado", con la clave de rastreo.
 
-Sin el teléfono del cliente, escribe `qr 150 corte` y recibe un QR para el mostrador, o `liga 150 corte` y recibe una liga de pago para mandarla por donde quiera. Si un cobro al celular expira, el asistente ofrece la liga como plan B. Con `resumen` ve lo que cobró en el día y lo que sigue pendiente.
+Sin el teléfono del cliente, escribe `qr 150 corte` y recibe un QR para el mostrador, o `liga 150 corte` y recibe una liga de pago para mandarla por donde quiera. Si el push no le llega al cliente, `liga` le da la liga de ese mismo cobro. Con `resumen` ve lo cobrado en el día y lo pendiente.
 
-También cobra desde la web: un panel que se actualiza solo, con el QR o la liga de cada cobro y exportación a CSV. Ahí registra su CLABE para que los pagos le lleguen directo.
+También cobra desde la web: push, QR o liga, con la página del cobro que cambia sola a "Pagado", el resumen del día y la descarga de cobros en CSV.
 
-Está pensado para pymes donde el dueño también vende: el administrador cobra y además ve lo de todo el negocio y los totales de cada persona. Sus vendedores cobran desde su propio WhatsApp y ven solo sus cobros.
+Está pensado para pymes donde el dueño también vende: el administrador cobra, ve todo el negocio y los totales por persona, invita a su equipo con una liga y pone un tope por cobro a cada vendedor. Cada vendedor cobra desde la web o su propio WhatsApp y ve solo sus cobros.
+
+**Cada negocio usa su propia API key de pey**, guardada cifrada: el dinero llega directo a su cuenta y nadie más lo concentra.
 
 ## Cómo usa el API de pey
 
 - **Push CoDi** (`POST /codi/pn`) para cobrar al celular del cliente.
-- **QR CoDi** (`POST /codi/qr`) para cobrar en persona.
+- **QR CoDi** (`POST /codi/qr`) para cobrar en persona; el QR se dibuja con el `qrString` tal cual.
 - **Ligas de pago** (`POST /payment-link/create`) como alternativa sin teléfono, con CoDi o tarjeta.
-- **Cuentas bancarias** (`POST /bank-account`) para que cada comerciante reciba en su propia CLABE: sus push y QR se crean con su `bankAccountId`.
-- **Webhooks firmados** (`codi.pn.payment_received`, `codi.qr.payment_received`, `payment_link.status_updated`, `bank.account.updated`), verificados con Standard Webhooks, para avisar del pago en el momento.
-- **Consulta de transacciones** (`GET /transaction/{id}`, `GET /transaction/codi/qr/{id}`) para confirmar cada pago antes de avisar.
+- **Webhooks firmados** (Standard Webhooks), una URL por negocio, para avisar del pago al momento.
+- **Consulta de transacciones y ligas** (`GET /transaction/{id}`, `GET /transaction/codi/qr/{id}`, `GET /payment-link/{id}`) para confirmar cada pago y su monto antes de avisar, y para conciliar si un webhook no llega.
 
-Cada cobro lleva su identificador en `metadata`, así un pago se liga a su cobro aunque se pierda una respuesta. Como el API no tiene llave de idempotencia, el asistente nunca reintenta un cobro solo: prefiere avisar antes que cobrar dos veces.
+Como el API no tiene llave de idempotencia, un cobro nunca se reintenta solo: si se corta la conexión, el asistente avisa antes que arriesgarse a cobrar dos veces.
 
 ## Por qué importa
 
-El comerciante no instala nada ni aprende una app: usa el chat que ya usa todo el día. Quien paga ve el nombre del negocio y el concepto en su banco, y el dinero llega al momento y sin comisión. [Agregar métricas de la prueba con un negocio real.]
+El comerciante no instala nada: usa el chat de todos los días, o una web. Quien paga ve el nombre del negocio y el concepto en su banco, y el dinero llega al momento y sin comisión. [Agregar métricas de la prueba con un negocio real.]
 
 ## Demo
 
-La demo pública usa el mismo asistente, en una página web, con cobros reales de hasta $1.00: [URL]/demo. El panel se prueba con la cuenta de prueba de las instrucciones.
+La demo pública usa el mismo asistente, en una página web, con cobros reales de hasta $1.00: [URL]/demo.

@@ -1,0 +1,24 @@
+# Postgres local para desarrollo y pruebas. En producción se usa Neon (DATABASE_URL).
+#   docker compose up -d
+name: cobrale-api
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cobrale
+      POSTGRES_PASSWORD: cobrale
+      POSTGRES_DB: cobrale
+    ports:
+      - '5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cobrale']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:

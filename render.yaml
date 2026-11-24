@@ -1,52 +1,95 @@
 # Blueprint de Render para Cóbrale: https://render.com/docs/blueprint-spec
+# Guía paso a paso: backend/docs/deploy.md
 #
-# Crea un Web Service en el plan gratis. Los datos viven en Postgres (Neon,
-# también gratis), así que no se pierden en cada despliegue y el servicio puede
-# tener varias instancias. Los secretos no van aquí: Render los pide al aplicar
-# el Blueprint (los que tienen `sync: false`).
-#
-# Guía paso a paso: docs/deploy-render.md
+# La base de datos vive en Neon (DATABASE_URL), no en Render.
+# Los secretos no van aquí: Render los pide al aplicar el Blueprint (sync: false).
 
 services:
   - type: web
-    name: cobrale
+    name: cobrale-api
     runtime: node
+    # La API vive en backend/ del monorepo (las apps de front en front/<app>).
+    rootDir: backend
+    # free: se duerme tras 15 min sin tráfico (el primer request tarda ~1 min y el
+    # barrido no corre dormido). Para la evaluación del hackatón conviene starter.
     plan: free
-    # La región no se puede cambiar después de crear el servicio. Conviene la
-    # misma zona que la base de Neon (AWS us-east-1).
-    region: virginia
+    # Ohio, igual que Neon en AWS us-east-2: menos latencia entre API y base.
+    region: ohio
     branch: main
-    buildCommand: npm ci --omit=dev && npm run build
-    startCommand: npm start
+    buildCommand: npm ci && npm run build
+    # Corre las migraciones pendientes y arranca (preDeployCommand no existe en free).
+    startCommand: npm run start:render
     healthCheckPath: /health
     envVars:
+      - key: NODE_VERSION
+        value: '22'
+
       # --- Secretos: Render los pide al aplicar el Blueprint ---
-      - key: PEY_API_KEY
-        sync: false
-      # Se obtiene al registrar el webhook en portal.pey.mx, después del
-      # primer despliegue. Puede quedar vacío mientras tanto.
-      - key: PEY_WEBHOOK_SECRET
-        sync: false
-      # Cadena de conexión directa de Neon (sin "-pooler").
+      # No hay API key de pey global: cada negocio registra la suya (POST /businesses).
       - key: DATABASE_URL
         sync: false
-      # Cuenta de la web para el jurado (opcional).
-      - key: DEMO_ACCOUNT_EMAIL
+      # URL pública de este servicio (https://<nombre>.onrender.com), para la URL de webhook de cada negocio
+      - key: PUBLIC_BASE_URL
         sync: false
-      - key: DEMO_ACCOUNT_PASSWORD
+      # URL de la web (Next.js), para las ligas de invitación y el regreso de la liga de pago
+      - key: FRONTEND_URL
         sync: false
-      # Correos que cobran sin el límite del modo prueba (opcional).
-      - key: TRUSTED_EMAILS
+      # Orígenes de navegador que llaman la API: la web y la demo de Expo web, separados por coma
+      - key: CORS_ORIGINS
         sync: false
-
-      # --- Configuración ---
-      - key: DEMO_ENABLED
-        value: "true"
+      # WhatsApp Cloud API (Meta): las cuatro o ninguna (déjalas vacías para no usar WhatsApp)
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      # Demo pública: id del negocio de demostración del equipo (vacío = demo apagada)
+      - key: DEMO_BUSINESS_ID
+        sync: false
       - key: DEMO_MAX_AMOUNT
-        value: "1"
-      - key: DEMO_MERCHANT_NAME
-        value: Negocio de prueba
+        value: '1'
+
+      # --- Generados y fijos ---
+      - key: AUTH_SECRET
+        generateValue: true
+      # 256 bits en base64: cifra las API keys de los negocios. NO la cambies
+      # después: las credenciales guardadas dejarían de poder descifrarse.
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: DATABASE_SSL
+        value: 'true'
       - key: TRUST_PROXY
-        value: "true"
-      # PUBLIC_BASE_URL no hace falta: Cóbrale usa RENDER_EXTERNAL_URL, que
-      # Render llena con la URL pública del servicio.
+        value: 'true'
+      # FRONT_PROXY_SECRET, compartido con la web
+      - fromGroup: cobrale-compartido
+
+  # La web (Next.js): todas las pantallas. Llama a la API desde su servidor.
+  - type: web
+    name: cobrale-web
+    runtime: node
+    rootDir: front/web
+    plan: free
+    region: ohio
+    branch: main
+    buildCommand: npm ci && npm run build
+    # next start usa el PORT que pone Render.
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      # URL pública de la API: https://<cobrale-api>.onrender.com (sin / al final)
+      - key: API_URL
+        sync: false
+      - fromGroup: cobrale-compartido
+
+envVarGroups:
+  # Mismo valor en la API y en la web: con él la web manda la IP real de cada
+  # visitante y la API la acepta (si no, los límites por IP serían globales).
+  - name: cobrale-compartido
+    envVars:
+      - key: FRONT_PROXY_SECRET
+        generateValue: true
