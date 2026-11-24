@@ -2,14 +2,15 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { logout } from '@/features/auth/actions/logout.action';
 import { getCurrentUser } from '@/features/auth/services/current-user.service';
+import { Logo } from '@/shared/ui/logo';
 
 export default function PanelLayout({ children }: LayoutProps<'/panel'>) {
   return (
     <div className="flex flex-1 flex-col">
       <header className="border-b border-zinc-200">
         <nav className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
-          <Link href="/panel" className="text-lg font-semibold text-zinc-900">
-            Cóbrale
+          <Link href="/panel" aria-label="Cóbrale, inicio del panel">
+            <Logo size={30} />
           </Link>
           <Link href="/panel/cobros/nuevo" className="font-medium text-emerald-800">
             Nuevo cobro

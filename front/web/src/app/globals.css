@@ -4,6 +4,22 @@
   --font-sans: var(--font-geist-sans);
 }
 
+/* Flotado suave de la ilustración de la pantalla de entrada (solo con motion-safe). */
+@theme {
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-float-delayed: float 7s ease-in-out 1.5s infinite;
+
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+}
+
 body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }

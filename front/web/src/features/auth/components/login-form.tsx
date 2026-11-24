@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { primaryButton } from '@/shared/ui/styles';
 import { TextField } from '@/shared/ui/text-field';
 import { login } from '../actions/login.action';
 import type { LoginState } from '../types/login-state.type';
@@ -11,9 +12,9 @@ export function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
 
   return (
-    <form action={formAction} className="flex flex-col gap-4" noValidate>
+    <form action={formAction} className="flex flex-col gap-5" noValidate>
       {state.formError && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-red-200">
           {state.formError}
         </p>
       )}
@@ -38,7 +39,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:opacity-60"
+        className={`mt-1 ${primaryButton}`}
       >
         {pending ? 'Entrando…' : 'Entrar'}
       </button>

@@ -22,7 +22,7 @@ export function TextField({ label, error, id, className, ...input }: TextFieldPr
         id={inputId}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
-        className={`rounded-md border px-3 py-2 text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-600 ${
+        className={`rounded-lg border bg-white px-3 py-2.5 text-zinc-900 shadow-sm outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/30 ${
           error ? 'border-red-600' : 'border-zinc-300'
         } ${className ?? ''}`}
         {...input}
