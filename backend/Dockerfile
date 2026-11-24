@@ -12,8 +12,8 @@ ENV NODE_ENV=production PORT=3000
 # Autoridades de certificación de Amazon RDS: con DATABASE_SSL=true la conexión
 # verifica el certificado, y el de RDS no viene en el almacén de Node. A Neon
 # no le afecta (se suman a las de siempre).
-RUN node -e "fetch('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}).then(t=>require('fs').writeFileSync('/etc/ssl/certs/rds-global-bundle.pem',t))"
-ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem
+RUN node -e "const u='https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem';(async()=>{for(let i=1;;i++){try{const r=await fetch(u);if(!r.ok)throw new Error('HTTP '+r.status);require('fs').writeFileSync('/usr/local/share/rds-global-bundle.pem',await r.text());return}catch(e){console.error('intento '+i+':',e.cause||e);if(i>=5)process.exit(1);await new Promise(s=>setTimeout(s,5000*i))}}})()"
+ENV NODE_EXTRA_CA_CERTS=/usr/local/share/rds-global-bundle.pem
 WORKDIR /app
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
