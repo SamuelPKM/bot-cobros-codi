@@ -147,6 +147,96 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
     });
   });
 
+  describe('GET /reports/overview', () => {
+    /** El día de hoy más un cobro pagado hace 8 días (periodo anterior) por QR. */
+    async function seedWeek() {
+      await seedDay();
+      await qrCharge(ana, 50); // 6: pagado hace 8 días
+      await setStatus(6, 'paid');
+      await db.query(
+        `UPDATE charges SET created_at = now() - interval '8 days' WHERE id = 6`,
+      );
+      await db.query(
+        `UPDATE charges SET paid_via = 'qr' WHERE status = 'paid'`,
+      );
+    }
+
+    it('el admin ve el periodo del negocio contra el anterior', async () => {
+      await seedWeek();
+      const res = await http
+        .get('/reports/overview')
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+      const body = res.body;
+      expect(body).toMatchObject({
+        businessName: 'Tacos Ana',
+        days: 7,
+        to: todayInMexico(),
+        paid: { count: 2, amount: 130 },
+        previousPaidAmount: 50,
+        paidChange: 1.6,
+        averageTicket: 65,
+        // 2 pagados de 3 terminados; los pendientes (2 y 5) no cuentan.
+        paymentRate: 2 / 3,
+        byMethod: [
+          { method: 'push', count: 0, amount: 0 },
+          { method: 'qr', count: 2, amount: 130 },
+          { method: 'link', count: 0, amount: 0 },
+        ],
+      });
+      expect(body.daily).toHaveLength(7);
+      expect(body.daily.at(-1)).toEqual({
+        date: todayInMexico(),
+        count: 2,
+        amount: 130,
+      });
+      expect(body.daily[0].date).toBe(body.from);
+      expect(body.peakHour).toEqual(expect.any(Number));
+    });
+
+    it('el vendedor solo ve lo suyo', async () => {
+      await seedWeek();
+      const res = await http
+        .get('/reports/overview?days=30')
+        .set('Authorization', `Bearer ${ana}`)
+        .expect(200);
+      expect(res.body).toMatchObject({
+        businessName: 'Tacos Ana',
+        days: 30,
+        // 1 de hoy y el de hace 8 días: ya entra en 30 días.
+        paid: { count: 2, amount: 150 },
+        previousPaidAmount: 0,
+        paidChange: null,
+      });
+      expect(res.body.daily).toHaveLength(30);
+    });
+
+    it('sin cobros, todo en cero y sin tasas', async () => {
+      const res = await http
+        .get('/reports/overview')
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+      expect(res.body).toMatchObject({
+        paid: { count: 0, amount: 0 },
+        averageTicket: null,
+        paymentRate: null,
+        paidChange: null,
+        peakHour: null,
+      });
+    });
+
+    it('solo acepta 7, 30 o 90 días', async () => {
+      await http
+        .get('/reports/overview?days=5')
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(400);
+    });
+
+    it('exige sesión', async () => {
+      await http.get('/reports/overview').expect(401);
+    });
+  });
+
   describe('GET /reports/charges.csv', () => {
     it('el admin descarga los cobros del día de su negocio', async () => {
       await seedDay();

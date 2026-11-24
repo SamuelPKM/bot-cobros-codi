@@ -12,8 +12,18 @@ import type {
   ChargesExport,
   DailySummary,
   PersonSummary,
+  ReportOverview,
 } from '../interfaces/report.interfaces';
 import { toCsv } from '../policies/csv.policy';
+import {
+  byMethod,
+  change,
+  dailyPaid,
+  type DayStatusRow,
+  type MethodRow,
+  paymentRate,
+  periodRange,
+} from '../policies/overview.policy';
 
 interface StatusRow {
   seller_id: number;
@@ -68,6 +78,74 @@ export class ReportsService {
         user.role === 'admin'
           ? await this.byPerson(user.businessId, rows)
           : null,
+    };
+  }
+
+  /**
+   * Resumen de los últimos `days` días (hoy incluido) contra los `days`
+   * anteriores. Los cobros cuentan en el día en que se crearon, como en el
+   * corte de hoy.
+   */
+  async overview(user: User, days: number): Promise<ReportOverview> {
+    const range = periodRange(todayInMexico(), days);
+    const scope = [user.businessId, sellerFilter(user), REPORT_TIME_ZONE];
+    const where = `business_id = $1 AND ($2::int IS NULL OR seller_id = $2)
+          AND (created_at AT TIME ZONE $3)::date BETWEEN $4::date AND $5::date`;
+
+    const [byDay, previous, methods, hours, business] = await Promise.all([
+      this.dataSource.query<DayStatusRow[]>(
+        `SELECT to_char((created_at AT TIME ZONE $3)::date, 'YYYY-MM-DD') AS day,
+                status, count(*) AS count, coalesce(sum(amount_cents), 0) AS cents
+           FROM charges WHERE ${where}
+          GROUP BY 1, 2`,
+        [...scope, range.from, range.to],
+      ),
+      this.dataSource.query<{ cents: string }[]>(
+        `SELECT coalesce(sum(amount_cents), 0) AS cents
+           FROM charges WHERE ${where} AND status = 'paid'`,
+        [...scope, range.previousFrom, range.previousTo],
+      ),
+      this.dataSource.query<MethodRow[]>(
+        `SELECT paid_via AS method, count(*) AS count, coalesce(sum(amount_cents), 0) AS cents
+           FROM charges WHERE ${where} AND status = 'paid'
+          GROUP BY 1`,
+        [...scope, range.from, range.to],
+      ),
+      this.dataSource.query<{ hour: number }[]>(
+        `SELECT extract(hour FROM created_at AT TIME ZONE $3)::int AS hour
+           FROM charges WHERE ${where} AND status = 'paid'
+          GROUP BY 1 ORDER BY count(*) DESC, 1 LIMIT 1`,
+        [...scope, range.from, range.to],
+      ),
+      this.dataSource.query<{ name: string }[]>(
+        `SELECT name FROM businesses WHERE id = $1`,
+        [user.businessId],
+      ),
+    ]);
+
+    const daily = dailyPaid(range.from, days, byDay);
+    const paidCount = daily.reduce((sum, d) => sum + d.count, 0);
+    const paidCents = byDay
+      .filter((r) => r.status === 'paid')
+      .reduce((sum, r) => sum + Number(r.cents), 0);
+    const previousCents = Number(previous[0]?.cents ?? 0);
+
+    return {
+      businessName: business[0]?.name ?? '',
+      days,
+      from: range.from,
+      to: range.to,
+      paid: { count: paidCount, amount: centsToPesos(paidCents) },
+      previousPaidAmount: centsToPesos(previousCents),
+      paidChange: change(paidCents, previousCents),
+      averageTicket:
+        paidCount === 0
+          ? null
+          : centsToPesos(Math.round(paidCents / paidCount)),
+      paymentRate: paymentRate(byDay),
+      daily,
+      byMethod: byMethod(methods),
+      peakHour: hours[0]?.hour ?? null,
     };
   }
 

@@ -3,7 +3,11 @@ import type { Response } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { User } from '../../users/entities/user.entity';
 import { ExportChargesQueryDto } from '../dto/export-charges.query.dto';
-import type { DailySummary } from '../interfaces/report.interfaces';
+import { OverviewQueryDto } from '../dto/overview.query.dto';
+import type {
+  DailySummary,
+  ReportOverview,
+} from '../interfaces/report.interfaces';
 import { ReportsService } from '../services/reports.service';
 
 /** Reportes para el admin (todo el negocio) y el vendedor (lo suyo). Solo datos, sin pantallas. */
@@ -15,6 +19,15 @@ export class ReportsController {
   @Get('today')
   today(@CurrentUser() user: User): Promise<DailySummary> {
     return this.reports.today(user);
+  }
+
+  /** Resumen de los últimos 7, 30 o 90 días, con el nombre del negocio. */
+  @Get('overview')
+  overview(
+    @CurrentUser() user: User,
+    @Query() query: OverviewQueryDto,
+  ): Promise<ReportOverview> {
+    return this.reports.overview(user, query.days ?? 7);
   }
 
   /** Cobros en CSV, para Excel o la contabilidad. */

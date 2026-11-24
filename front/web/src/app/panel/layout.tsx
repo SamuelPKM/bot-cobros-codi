@@ -6,9 +6,9 @@ import { Logo } from '@/shared/ui/logo';
 
 export default function PanelLayout({ children }: LayoutProps<'/panel'>) {
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="border-b border-zinc-200">
-        <nav className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
+    <div className="flex flex-1 flex-col bg-zinc-50">
+      <header className="border-b border-zinc-200 bg-white">
+        <nav className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
           <Link href="/panel" aria-label="Cóbrale, inicio del panel">
             <Logo size={30} />
           </Link>
@@ -34,7 +34,7 @@ export default function PanelLayout({ children }: LayoutProps<'/panel'>) {
           </div>
         </nav>
       </header>
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-4 py-8">{children}</main>
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8">{children}</main>
     </div>
   );
 }
