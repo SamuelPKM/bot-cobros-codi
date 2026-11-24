@@ -3,9 +3,13 @@
 # navegador en la consola de AWS), desde una copia de este repositorio.
 #
 # Qué crea, todo con el nombre "cobrale":
-#   - Parámetros cifrados en SSM Parameter Store (/cobrale/...): DATABASE_URL
-#     de Neon, token de GitHub y llaves generadas (AUTH_SECRET, ENCRYPTION_KEY,
-#     FRONT_PROXY_SECRET). No hay API key de pey: cada negocio registra la suya.
+#   - Una base Postgres en Amazon RDS (db.t4g.micro, cifrada, sin acceso
+#     público: solo la alcanza el servidor). Con DB=neon no se crea y se pide
+#     la DATABASE_URL de Neon.
+#   - Parámetros cifrados en SSM Parameter Store (/cobrale/...): DATABASE_URL,
+#     token de GitHub (solo si el repositorio es privado) y llaves generadas
+#     (AUTH_SECRET, ENCRYPTION_KEY, FRONT_PROXY_SECRET). No hay API key de pey:
+#     cada negocio registra la suya.
 #   - Un rol de IAM para la instancia: solo puede leer /cobrale/* y ser
 #     administrada con Session Manager. Sin llaves SSH.
 #   - Un grupo de seguridad con los puertos 80 y 443 abiertos (nada más).
@@ -17,14 +21,18 @@
 #
 # Uso:
 #   bash deploy/aws/crear.sh
-# Variables opcionales: REGION (us-east-2, la de Neon), INSTANCE_TYPE
+# Variables opcionales: REGION (us-east-2), INSTANCE_TYPE
 # (t3.small; t3.micro también sirve, pero cada actualización deja la web unos
-# minutos sin servicio), BRANCH (main), REPO (SamuelPKM/bot-cobros-codi),
+# minutos sin servicio), DB (rds o neon; rds por defecto), DB_CLASS
+# (db.t4g.micro), BRANCH (main), REPO (SamuelPKM/bot-cobros-codi),
 # DOMAIN (tu dominio para la web; la API queda en api.<DOMAIN>).
 set -euo pipefail
 
 REGION="${REGION:-us-east-2}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t3.small}"
+DB="${DB:-rds}"
+DB_CLASS="${DB_CLASS:-db.t4g.micro}"
+[[ "$DB" == rds || "$DB" == neon ]] || { echo "DB debe ser rds o neon" >&2; exit 1; }
 BRANCH="${BRANCH:-main}"
 REPO="${REPO:-SamuelPKM/bot-cobros-codi}"
 NAME=cobrale
@@ -51,10 +59,13 @@ ask() { # ask VAR "pregunta" [opcional]
   [[ -n "$value" || "${3:-}" == opcional ]] || die "$1 es obligatorio"
   printf -v "$1" '%s' "$value"
 }
-ask DATABASE_URL "DATABASE_URL de Neon (conexión directa, sin -pooler)"
-[[ "$DATABASE_URL" == postgres* ]] || die "DATABASE_URL debe empezar con postgresql://"
-[[ "$DATABASE_URL" != *-pooler* ]] || die "esa cadena usa el pooler de Neon; copia la conexión directa"
-ask GITHUB_TOKEN "Token de GitHub de solo lectura para $REPO"
+DATABASE_URL=""
+if [[ "$DB" == neon ]]; then
+  ask DATABASE_URL "DATABASE_URL de Neon (conexión directa, sin -pooler)"
+  [[ "$DATABASE_URL" == postgres* ]] || die "DATABASE_URL debe empezar con postgresql://"
+  [[ "$DATABASE_URL" != *-pooler* ]] || die "esa cadena usa el pooler de Neon; copia la conexión directa"
+fi
+ask GITHUB_TOKEN "Token de GitHub de solo lectura para $REPO (Enter si el repositorio es público)" opcional
 
 put() { # put NOMBRE VALOR [SecureString|String]
   [[ -n "$2" ]] || return 0
@@ -85,7 +96,6 @@ generate api/ENCRYPTION_KEY openssl rand -base64 32
 generate api/FRONT_PROXY_SECRET openssl rand -hex 32
 put web/FRONT_PROXY_SECRET "$(aws ssm get-parameter --name "$PREFIX/api/FRONT_PROXY_SECRET" --with-decryption --query Parameter.Value --output text)"
 
-put api/DATABASE_URL "$DATABASE_URL"
 put api/DATABASE_SSL true String
 put api/PUBLIC_BASE_URL "https://$API_DOMAIN" String
 put api/FRONTEND_URL "https://$SITE_DOMAIN" String
@@ -98,7 +108,7 @@ put infra/REPO "$REPO" String
 put infra/BRANCH "$BRANCH" String
 put infra/SITE_DOMAIN "$SITE_DOMAIN" String
 put infra/API_DOMAIN "$API_DOMAIN" String
-unset DATABASE_URL GITHUB_TOKEN
+unset GITHUB_TOKEN
 
 # ------------------------------------------------------------ IAM
 say "Rol de IAM para la instancia"
@@ -138,6 +148,42 @@ if [[ "$SG" == None || -z "$SG" ]]; then
     'IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges=[{CidrIp=0.0.0.0/0}],Ipv6Ranges=[{CidrIpv6=::/0}]' \
     'IpProtocol=udp,FromPort=443,ToPort=443,IpRanges=[{CidrIp=0.0.0.0/0}],Ipv6Ranges=[{CidrIpv6=::/0}]' >/dev/null
 fi
+
+# ------------------------------------------------------------ base de datos
+if [[ "$DB" == rds ]]; then
+  say "Base de datos en RDS ($DB_CLASS)"
+  DB_SG="$(aws ec2 describe-security-groups --filters "Name=group-name,Values=$NAME-db" "Name=vpc-id,Values=$VPC" \
+    --query 'SecurityGroups[0].GroupId' --output text)"
+  if [[ "$DB_SG" == None || -z "$DB_SG" ]]; then
+    DB_SG="$(aws ec2 create-security-group --group-name "$NAME-db" --description "Cobrale: Postgres solo desde el servidor" \
+      --vpc-id "$VPC" --query GroupId --output text)"
+    aws ec2 authorize-security-group-ingress --group-id "$DB_SG" \
+      --ip-permissions "IpProtocol=tcp,FromPort=5432,ToPort=5432,UserIdGroupPairs=[{GroupId=$SG}]" >/dev/null
+  fi
+  if aws rds describe-db-instances --db-instance-identifier "$NAME" >/dev/null 2>&1; then
+    echo "La base $NAME ya existe; se reutiliza."
+    aws ssm get-parameter --name "$PREFIX/api/DATABASE_URL" >/dev/null 2>&1 ||
+      die "la base $NAME existe pero falta $PREFIX/api/DATABASE_URL; guárdala con: bash deploy/aws/variable.sh api DATABASE_URL"
+  else
+    # Solo letras y números: la contraseña va dentro de la URL sin escapar.
+    DB_PASSWORD="$(openssl rand -hex 24)"
+    aws rds create-db-instance --db-instance-identifier "$NAME" --engine postgres \
+      --db-instance-class "$DB_CLASS" --allocated-storage 20 --storage-type gp3 --storage-encrypted \
+      --master-username cobrale --master-user-password "$DB_PASSWORD" --db-name cobrale \
+      --vpc-security-group-ids "$DB_SG" --no-publicly-accessible --no-multi-az \
+      --backup-retention-period 1 --deletion-protection --copy-tags-to-snapshot \
+      --tags "Key=Name,Value=$NAME" >/dev/null
+    echo "Creando la base (de 5 a 10 minutos)..."
+    aws rds wait db-instance-available --db-instance-identifier "$NAME"
+    DB_HOST="$(aws rds describe-db-instances --db-instance-identifier "$NAME" \
+      --query 'DBInstances[0].Endpoint.Address' --output text)"
+    put api/DATABASE_URL "postgresql://cobrale:$DB_PASSWORD@$DB_HOST:5432/cobrale"
+    unset DB_PASSWORD
+  fi
+else
+  put api/DATABASE_URL "$DATABASE_URL"
+fi
+unset DATABASE_URL
 
 # ------------------------------------------------------------ instancia
 say "Instancia $INSTANCE_TYPE (Amazon Linux 2023)"

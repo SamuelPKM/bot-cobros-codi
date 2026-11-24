@@ -66,10 +66,11 @@ run_web() {
 if [[ -z "$MODE" ]]; then
   repo="$(param infra/REPO)"
   branch="$(param infra/BRANCH)"
-  token="$(param infra/GITHUB_TOKEN)"
+  # El token solo hace falta si el repositorio es privado.
+  token="$(param infra/GITHUB_TOKEN 2>/dev/null || true)"
   echo "==> Bajando $repo ($branch)"
   # El token no se guarda en .git/config: se usa solo para esta descarga.
-  git -C "$SRC" fetch --depth 1 "https://x-access-token:${token}@github.com/${repo}.git" "$branch"
+  git -C "$SRC" fetch --depth 1 "https://${token:+x-access-token:${token}@}github.com/${repo}.git" "$branch"
   git -C "$SRC" reset --hard FETCH_HEAD
   unset token
 fi

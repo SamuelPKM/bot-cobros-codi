@@ -1,6 +1,6 @@
 # Deploy en AWS y primer cobro real ($0.01)
 
-Arquitectura: **AWS EC2** (la API y la web en Docker, detrás de Caddy) + **Neon** (Postgres) + **pey** (CoDi). No hay sandbox de pey: todo se prueba en producción con **$0.01**.
+Arquitectura: **AWS EC2** (la API y la web en Docker, detrás de Caddy) + **Amazon RDS** (Postgres) + **pey** (CoDi). También se puede usar **Neon** en lugar de RDS: `DB=neon bash deploy/aws/crear.sh`. No hay sandbox de pey: todo se prueba en producción con **$0.01**.
 
 Todo se hace desde **AWS CloudShell**, la terminal que trae la consola de AWS en el navegador: no instalas nada en tu computadora y no hace falta SSH. El servidor está siempre encendido, así que el barrido de cobros vencidos nunca se detiene.
 
@@ -13,7 +13,7 @@ Todo se hace desde **AWS CloudShell**, la terminal que trae la consola de AWS en
 | Web | `front/web` (Next.js) en otro contenedor; habla con la API por la red interna de Docker |
 | HTTPS | Caddy, con certificados automáticos y renovación sola |
 | URLs | Web en `https://<ip>.sslip.io` y API en `https://api.<ip>.sslip.io` (gratis, sin comprar dominio), o tu propio dominio |
-| Base de datos | Postgres en Neon (`DATABASE_URL`) |
+| Base de datos | Postgres en RDS (`db.t4g.micro`, 20 GB, cifrada, sin acceso público: solo la alcanza el servidor). La contraseña se genera sola y queda en `DATABASE_URL`. Con `DB=neon`, Postgres en Neon |
 | Secretos | SSM Parameter Store, cifrados, bajo `/cobrale/...` |
 | Acceso al servidor | Session Manager y Run Command de SSM. El firewall solo abre 80 y 443 |
 
@@ -40,11 +40,13 @@ Para no tener sorpresas, crea una alerta: **Billing > Budgets > Create budget > 
 
 ## Antes de empezar
 
-1. **La base en Neon**:
+Con RDS (lo normal) no hace falta preparar nada: `crear.sh` crea la base. RDS suma unos 14 USD al mes (`db.t4g.micro` y 20 GB) al costo del servidor.
+
+1. **Solo con `DB=neon`, la base en Neon**:
    - En [neon.tech](https://neon.tech), crea un proyecto en la región **AWS US East 2 (Ohio)**.
    - En *Connection Details* elige la conexión **directa**: el host **no** debe llevar `-pooler`. Copia la cadena `postgresql://...?sslmode=require`.
    - No uses la conexión *pooled*: el barrido usa un advisory lock de sesión, y PgBouncer en modo transacción cambia de sesión entre consultas.
-2. **Un token de GitHub de solo lectura**, para que el servidor baje el código del repositorio privado:
+2. **Solo si el repositorio es privado, un token de GitHub de solo lectura**, para que el servidor baje el código (si es público, deja la pregunta vacía con Enter):
    - En GitHub: **Settings > Developer settings > Personal access tokens > Fine-grained tokens > Generate new token**.
    - **Repository access**: *Only select repositories* > `bot-cobros-codi`.
    - **Permissions**: *Contents* > *Read-only*. Nada más.
@@ -153,7 +155,7 @@ Usa **tu propio celular**, registrado en CoDi en la app de tu banco (las reglas 
 | Renovar el token de GitHub | `bash deploy/aws/variable.sh GITHUB_TOKEN` |
 | Ver estado, memoria y registros | `bash deploy/aws/registros.sh` |
 | Entrar al servidor | Consola de EC2 > instancia `cobrale` > **Connect** > **Session Manager** |
-| Borrar todo (no toca Neon) | `bash deploy/aws/borrar.sh` |
+| Borrar todo (con RDS deja un respaldo final; no toca Neon) | `bash deploy/aws/borrar.sh` |
 
 Las variables de la API van en `/cobrale/api/<NOMBRE>` y las de la web en `/cobrale/web/<NOMBRE>`. También se pueden ver en la consola: **Systems Manager > Parameter Store**. Si cambias una ahí, aplícala con `variable.sh` o con `actualizar.sh`.
 

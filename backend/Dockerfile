@@ -9,6 +9,11 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim
 ENV NODE_ENV=production PORT=3000
+# Autoridades de certificación de Amazon RDS: con DATABASE_SSL=true la conexión
+# verifica el certificado, y el de RDS no viene en el almacén de Node. A Neon
+# no le afecta (se suman a las de siempre).
+RUN node -e "fetch('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}).then(t=>require('fs').writeFileSync('/etc/ssl/certs/rds-global-bundle.pem',t))"
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem
 WORKDIR /app
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules

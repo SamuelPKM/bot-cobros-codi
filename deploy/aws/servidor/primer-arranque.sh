@@ -26,17 +26,19 @@ git -C /opt/cobrale/src init -q
 # Primera descarga, con reintentos por si IAM todavía no propagó el permiso.
 fetched=no
 for _ in 1 2 3 4 5 6; do
+  # El token solo hace falta si el repositorio es privado.
+  token="$(aws ssm get-parameter --name /cobrale/infra/GITHUB_TOKEN --with-decryption --query Parameter.Value --output text 2>/dev/null || true)"
+  auth="${token:+x-access-token:${token}@}"
   if repo="$(aws ssm get-parameter --name /cobrale/infra/REPO --query Parameter.Value --output text)" &&
     branch="$(aws ssm get-parameter --name /cobrale/infra/BRANCH --query Parameter.Value --output text)" &&
-    token="$(aws ssm get-parameter --name /cobrale/infra/GITHUB_TOKEN --with-decryption --query Parameter.Value --output text)" &&
-    git -C /opt/cobrale/src fetch --depth 1 "https://x-access-token:${token}@github.com/${repo}.git" "$branch"; then
+    git -C /opt/cobrale/src fetch --depth 1 "https://${auth}github.com/${repo}.git" "$branch"; then
     fetched=yes
     break
   fi
   sleep 20
 done
-unset token
-[[ "$fetched" == yes ]] || { echo "No se pudo bajar el código: revisa el token de GitHub en /cobrale/infra/GITHUB_TOKEN"; exit 1; }
+unset token auth
+[[ "$fetched" == yes ]] || { echo "No se pudo bajar el código: si el repositorio es privado, revisa el token de GitHub en /cobrale/infra/GITHUB_TOKEN"; exit 1; }
 git -C /opt/cobrale/src reset --hard FETCH_HEAD
 
 # Al reiniciar la instancia, el servicio vuelve a levantar la app y Caddy.
