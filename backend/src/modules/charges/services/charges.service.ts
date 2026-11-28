@@ -15,6 +15,7 @@ import type { Env } from '../../../config/env.validation';
 import { centsToPesos } from '../../../shared/money/money';
 import { BusinessesService } from '../../businesses/services/businesses.service';
 import { PeyError } from '../../pey/errors/pey.error';
+import type { BusinessPaymentContext } from '../../businesses/interfaces/business.interfaces';
 import type { PeyApi } from '../../pey/interfaces/pey-api.interface';
 import type { User } from '../../users/entities/user.entity';
 import {
@@ -80,6 +81,8 @@ export class ChargesService {
       };
     }
     assertValidAmounts(user, input);
+    // Primero el contexto de pago: si la API key no se puede usar, no se guarda nada.
+    const context = await this.businesses.paymentContext(user.businessId);
     const charge = await this.dataSource.getRepository(Charge).save({
       businessId: user.businessId,
       sellerId: user.id,
@@ -88,7 +91,7 @@ export class ChargesService {
       tipCents: input.tipCents ?? 0,
       concept: input.concept,
     });
-    return this.show(user, charge.id, input.method);
+    return this.show(user, charge.id, input.method, context);
   }
 
   /**
@@ -233,10 +236,10 @@ export class ChargesService {
     user: User,
     chargeId: number,
     kind: ShownKind,
+    context?: BusinessPaymentContext,
   ): Promise<{ charge: Charge; attempt: PaymentAttempt }> {
-    const { businessName, pey } = await this.businesses.paymentContext(
-      user.businessId,
-    );
+    const { businessName, pey } =
+      context ?? (await this.businesses.paymentContext(user.businessId));
     if (kind === 'link') this.linkReturnUrls();
 
     const outcome = await this.dataSource.transaction(async (manager) => {

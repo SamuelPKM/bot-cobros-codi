@@ -26,6 +26,21 @@ npm test                 # unitarias (junto a cada archivo, *.spec.ts)
 npm run test:e2e         # e2e contra Postgres real (base cobrale_test), en test/
 ```
 
+## pey simulado (solo desarrollo)
+
+Para probar cobros de punta a punta desde el teléfono sin dinero real hay un pey falso en `scripts/dev-pey-mock/`. No arranca con `NODE_ENV=production`.
+
+```bash
+# secreto de ejemplo: "whsec_" + base64
+export MOCK_WEBHOOK_SECRET=whsec_$(echo -n "secreto-local-de-prueba" | base64)
+npm run dev:pey-mock     # escucha en 0.0.0.0:4010 (MOCK_PORT); abre http://localhost:4010
+node --test scripts/dev-pey-mock/server.test.mjs   # prueba de humo
+```
+
+1. En `backend/.env` pon `PEY_BASE_URL=http://localhost:4010` y reinicia la API.
+2. El negocio local debe tener guardada una API key cualquiera (8 caracteres o más, sin espacios) y, como secreto del webhook, el mismo `MOCK_WEBHOOK_SECRET`.
+3. Las ligas apuntan a `http://<host>:4010/pagar/<id>`; en la página de inicio marcas pagado cada push, QR o liga. El simulador manda el webhook firmado a `MOCK_WEBHOOK_URL` (por defecto `http://localhost:3000/webhooks/pey/dev-prueba`, es decir, el negocio con slug `dev-prueba`).
+
 ## Negocios y credenciales de pey
 
 La API **no tiene credenciales de pey propias**. Cada negocio registra la suya:

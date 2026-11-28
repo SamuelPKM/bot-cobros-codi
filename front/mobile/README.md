@@ -37,13 +37,13 @@ Es una variable `EXPO_PUBLIC_`, así que Expo la mete dentro de la app al compil
 
 ## Avisos push
 
-Los avisos no llegan en Expo Go ni en simuladores; la app funciona igual sin ellos.
+La app ya está vinculada al proyecto de EAS `@zorodiaz/cobrale` (`extra.eas.projectId` en `app.json`), que es lo que necesita para pedir el token de avisos.
 
-Para recibir "Pago recibido" se necesita una *development build* y un proyecto de EAS:
+- **iPhone con Expo Go:** "Pago recibido" sí llega (probado). Hay que iniciar sesión en Expo Go y en `npx expo login` con la misma cuenta.
+- **Android:** Expo Go ya no recibe avisos (desde SDK 53). Hace falta una *development build*: `npx eas-cli build --profile development --platform android` e instalarla.
+- **Simuladores:** no reciben avisos.
 
-1. `npx eas-cli login` y luego `npx eas-cli init`. Esto escribe `extra.eas.projectId` en la config.
-2. `npx eas-cli build --profile development --platform android` e instala la app en el teléfono.
-3. Al entrar, la app pide permiso para los avisos y registra el token en `POST /push-tokens`. Al salir lo borra con `DELETE /push-tokens`.
+Al entrar, la app pide permiso para los avisos y registra el token en `POST /push-tokens`. Al salir lo borra con `DELETE /push-tokens`. Sin permiso o sin token, la app funciona igual: el cobro cambia a "Pagado" porque se consulta cada 4 s.
 
 La API manda el aviso cuando confirma el pago con pey, el mismo momento en que el panel cambia a Pagado.
 

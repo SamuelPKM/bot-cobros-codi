@@ -59,6 +59,35 @@ describe('Cobros: push con QR de respaldo (e2e)', () => {
       .get(DataSource)
       .query(`UPDATE charges SET status = $1 WHERE id = $2`, [status, id]);
 
+  describe('POST /charges con la API key de pey ilegible', () => {
+    it.each(['qr', 'link', 'push'])(
+      '%s: responde 503 con mensaje claro, sin llamar a pey ni guardar el cobro',
+      async (method) => {
+        const db = app.get(DataSource);
+        await db.query(
+          `UPDATE businesses SET pey_api_key_sealed = 'sin-llave'`,
+        );
+        const count = async () =>
+          Number((await db.query('SELECT count(*) FROM charges'))[0].count);
+        const before = await count();
+
+        const res = await charge(ana, {
+          method,
+          phone: '5512345678',
+          amount: 10,
+        }).expect(503);
+
+        expect(res.body.message).toBe(
+          'No pudimos usar la API key de pey de tu negocio. Un administrador debe volver a guardarla en Ajustes.',
+        );
+        expect(await count()).toBe(before);
+        expect(pey.pushes).toHaveLength(0);
+        expect(pey.qrs).toHaveLength(0);
+        expect(pey.links).toHaveLength(0);
+      },
+    );
+  });
+
   describe('POST /charges (push)', () => {
     it('crea el cobro y manda el push CoDi al celular del cliente', async () => {
       const res = await charge(ana, {

@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { DataSource } from 'typeorm';
@@ -29,6 +30,8 @@ import type {
 
 const INVALID_KEY =
   'La API key de pey no es válida. Revísala en portal.mipey.mx > Desarrollador';
+const UNREADABLE_KEY =
+  'No pudimos usar la API key de pey de tu negocio. Un administrador debe volver a guardarla en Ajustes.';
 const PEY_UNAVAILABLE =
   'No pudimos validar tu API key con pey. Intenta de nuevo en unos minutos';
 const OPEN_CHARGES =
@@ -168,7 +171,16 @@ export class BusinessesService {
   }
 
   private clientFor(business: Business): PeyApi {
-    return this.peyFactory.create(this.box.open(business.peyApiKeySealed));
+    let apiKey: string;
+    try {
+      apiKey = this.box.open(business.peyApiKeySealed);
+    } catch (error) {
+      this.logger.error(
+        `no se pudo abrir la API key de pey del negocio ${business.id}: ${(error as Error).message}`,
+      );
+      throw new ServiceUnavailableException(UNREADABLE_KEY);
+    }
+    return this.peyFactory.create(apiKey);
   }
 
   private query() {
