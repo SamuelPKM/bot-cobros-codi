@@ -22,7 +22,12 @@ export interface PublicAttempt {
 export interface PublicCharge {
   id: number;
   status: ChargeStatus;
+  /** Total cobrado (cobro + propina). */
   amount: number;
+  /** El cobro sin propina. */
+  subtotal: number;
+  /** Propina; 0 si no hubo. */
+  tip: number;
   concept: string | null;
   /** null en cobros por QR o liga sin teléfono. */
   payerPhone: string | null;

@@ -7,6 +7,8 @@ import type { DailySummary } from '../interfaces/daily-summary.interface';
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
+const tipNote = (tips: number) => (tips > 0 ? ` · ${formatMoney(tips)} de propina` : '');
+
 type IconKind = 'check' | 'clock' | 'x';
 
 function TileIcon({ kind, color }: { kind: IconKind; color: string }) {
@@ -34,7 +36,7 @@ export function TodaySummary({ summary }: { summary: DailySummary }) {
     {
       label: 'Cobrado hoy',
       value: formatMoney(summary.paid.amount),
-      detail: plural(summary.paid.count, 'cobro', 'cobros'),
+      detail: `${plural(summary.paid.count, 'cobro', 'cobros')}${tipNote(summary.paid.tips)}`,
       icon: 'check',
       bg: palette.brandSoft,
       fg: palette.success,
@@ -93,7 +95,7 @@ export function TodaySummary({ summary }: { summary: DailySummary }) {
               <View style={styles.personBody}>
                 <Text style={styles.personName}>{person.name}</Text>
                 <Text style={styles.personDetail}>
-                  {`${formatMoney(person.paidAmount)} · ${plural(person.paidCount, 'pagado', 'pagados')} · ${plural(person.pendingCount, 'pendiente', 'pendientes')}`}
+                  {`${formatMoney(person.paidAmount)} · ${plural(person.paidCount, 'pagado', 'pagados')} · ${plural(person.pendingCount, 'pendiente', 'pendientes')}${tipNote(person.paidTips)}`}
                 </Text>
               </View>
               {index === 0 ? (

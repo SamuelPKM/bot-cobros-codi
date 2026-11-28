@@ -15,7 +15,12 @@ export interface PublicAttempt {
 export interface PublicCharge {
   id: number;
   status: ChargeStatus;
+  /** Total cobrado: cobro + propina. */
   amount: number;
+  /** Cobro sin propina. */
+  subtotal: number;
+  /** Propina; 0 si no hubo. */
+  tip: number;
   concept: string | null;
   payerPhone: string | null;
   seller: { id: number; name: string };

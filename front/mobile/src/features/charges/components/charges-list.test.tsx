@@ -22,6 +22,14 @@ describe('ChargesList', () => {
     expect(onOpen).toHaveBeenCalledWith(7);
   });
 
+  it('con propina la muestra en los detalles y en la etiqueta', async () => {
+    await render(
+      <ChargesList charges={[aCharge({ amount: 115, subtotal: 100, tip: 15 })]} onOpen={jest.fn()} />,
+    );
+    const row = screen.getByRole('button', { name: /\$115\.00.*propina \$15\.00/ });
+    expect(row).toHaveTextContent(/propina \$15\.00/);
+  });
+
   it('el admin ve quién cobró', async () => {
     await render(<ChargesList charges={[aCharge()]} onOpen={jest.fn()} showSeller />);
     expect(screen.getByText(/Ana Prueba/)).toBeOnTheScreen();

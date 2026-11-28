@@ -32,6 +32,7 @@ import type {
   CreateChargeInput,
   ListChargesFilter,
 } from '../interfaces/create-charge-input.interface';
+import { tipViolation } from '../policies/charge-tip.policy';
 import { payerConcept } from '../policies/payer-concept.policy';
 import { peyErrorReason } from '../policies/pey-error-reason.policy';
 
@@ -78,12 +79,13 @@ export class ChargesService {
         attempt: null,
       };
     }
-    assertWithinLimit(user, input.amountCents);
+    assertValidAmounts(user, input);
     const charge = await this.dataSource.getRepository(Charge).save({
       businessId: user.businessId,
       sellerId: user.id,
       payerPhone: input.payerPhone,
       amountCents: input.amountCents,
+      tipCents: input.tipCents ?? 0,
       concept: input.concept,
     });
     return this.show(user, charge.id, input.method);
@@ -103,7 +105,7 @@ export class ChargesService {
     const { businessName, pey } = await this.businesses.paymentContext(
       seller.businessId,
     );
-    assertWithinLimit(seller, input.amountCents);
+    assertValidAmounts(seller, input);
 
     const { charge, attempt } = await this.dataSource.transaction(
       async (manager) => {
@@ -124,6 +126,7 @@ export class ChargesService {
             sellerId: seller.id,
             payerPhone,
             amountCents: input.amountCents,
+            tipCents: input.tipCents ?? 0,
             concept: input.concept,
           }),
         );
@@ -394,6 +397,13 @@ export class ChargesService {
   private attempts() {
     return this.dataSource.getRepository(PaymentAttempt);
   }
+}
+
+/** Propina válida y total dentro del tope de la persona. */
+function assertValidAmounts(user: User, input: CreateChargeInput): void {
+  const violation = tipViolation(input.amountCents, input.tipCents ?? 0);
+  if (violation) throw new UnprocessableEntityException(violation);
+  assertWithinLimit(user, input.amountCents);
 }
 
 /** El tope por cobro de la persona, si tiene uno. */

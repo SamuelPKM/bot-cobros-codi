@@ -24,6 +24,11 @@ export async function ChargeDetail({ charge }: { charge: PublicCharge }) {
           <span className="text-3xl font-semibold tabular-nums">{formatMoney(charge.amount)}</span>
           <ChargeStatusBadge status={charge.status} />
         </div>
+        {charge.tip > 0 && (
+          <p className="text-sm text-zinc-600">
+            Cobro {formatMoney(charge.subtotal)} · Propina {formatMoney(charge.tip)}
+          </p>
+        )}
         <p className="text-zinc-700">
           {charge.concept ?? 'Sin concepto'} · Cliente {formatPhone(charge.payerPhone)} · Cobró{' '}
           {charge.seller.name}

@@ -35,10 +35,21 @@ describe('createCharge (Server Action)', () => {
     });
   });
 
+  it('manda la propina a la API junto con el cobro sin propina', async () => {
+    authedRequest.mockResolvedValue({ charge: { id: 43 } });
+    await expect(
+      createCharge({}, form({ method: 'qr', amount: '100', tipOption: '15' })),
+    ).rejects.toThrow('NEXT_REDIRECT:/panel/cobros/43');
+    expect(authedRequest).toHaveBeenCalledWith('/charges', {
+      method: 'POST',
+      body: { method: 'qr', amount: 100, tip: 15 },
+    });
+  });
+
   it('con errores no cobra y conserva lo escrito', async () => {
     const state = await createCharge({}, form({ method: 'push', phone: '123', amount: '150' }));
     expect(state.fieldErrors).toEqual({ phone: 'El celular debe tener 10 dígitos' });
-    expect(state.values).toEqual({ method: 'push', phone: '123', amount: '150', concept: '' });
+    expect(state.values).toEqual({ method: 'push', phone: '123', amount: '150', tipOption: '', tip: '', concept: '' });
     expect(authedRequest).not.toHaveBeenCalled();
   });
 

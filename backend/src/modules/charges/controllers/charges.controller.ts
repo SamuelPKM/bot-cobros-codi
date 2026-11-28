@@ -39,10 +39,12 @@ export class ChargesController {
     @CurrentUser() user: User,
     @Body() dto: CreateChargeDto,
   ): Promise<{ charge: PublicCharge; qr?: PublicQr; link?: PublicLink }> {
+    const tipCents = pesosToCents(dto.tip ?? 0);
     const { charge, attempt } = await this.charges.createCharge(user, {
       method: dto.method ?? 'push',
       payerPhone: dto.phone ?? null,
-      amountCents: pesosToCents(dto.amount),
+      amountCents: pesosToCents(dto.amount) + tipCents,
+      tipCents,
       concept: dto.concept?.trim() || null,
     });
     return {

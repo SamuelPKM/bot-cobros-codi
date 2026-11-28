@@ -17,6 +17,8 @@ const charge = (over: Partial<PublicCharge>): PublicCharge => ({
   id: 7,
   status: 'pending',
   amount: 150,
+  subtotal: 150,
+  tip: 0,
   concept: 'corte',
   payerPhone: '5512345678',
   seller: { id: 1, name: 'Ana' },

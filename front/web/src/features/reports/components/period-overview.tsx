@@ -80,7 +80,14 @@ export function PeriodOverview({ overview }: { overview: ReportOverview }) {
         <Kpi
           label="Cobrado"
           value={formatMoney(paid.amount)}
-          detail={<Change change={overview.paidChange} days={days} />}
+          detail={
+            <>
+              <Change change={overview.paidChange} days={days} />
+              {paid.tips > 0 && (
+                <span className="block">Incluye {formatMoney(paid.tips)} de propina</span>
+              )}
+            </>
+          }
         />
         <Kpi
           label="Ticket promedio"

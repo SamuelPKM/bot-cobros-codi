@@ -19,7 +19,7 @@ export function ChargesList({ charges, onOpen, showSeller = false }: ChargesList
   return (
     <View style={[styles.list, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       {charges.map((charge, index) => {
-        const details = [charge.concept, showSeller ? charge.seller.name : null, formatTime(charge.createdAt)]
+        const details = [charge.concept, charge.tip > 0 ? `propina ${formatMoney(charge.tip)}` : null, showSeller ? charge.seller.name : null, formatTime(charge.createdAt)]
           .filter(Boolean)
           .join(' · ');
         return (

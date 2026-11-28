@@ -1,5 +1,6 @@
 import { centsToPesos } from '../../../shared/money/money';
 import type { Charge } from '../entities/charge.entity';
+import { splitTotal } from '../policies/charge-tip.policy';
 import type { PaymentAttempt } from '../entities/payment-attempt.entity';
 import type {
   PublicAttempt,
@@ -29,6 +30,10 @@ export function toPublicCharge(charge: Charge): PublicCharge {
     id: charge.id,
     status: charge.status,
     amount: centsToPesos(charge.amountCents),
+    subtotal: centsToPesos(
+      splitTotal(charge.amountCents, charge.tipCents).subtotalCents,
+    ),
+    tip: centsToPesos(charge.tipCents),
     concept: charge.concept,
     payerPhone: charge.payerPhone,
     seller: { id: charge.sellerId, name: charge.seller?.name ?? '' },

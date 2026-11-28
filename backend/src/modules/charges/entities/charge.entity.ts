@@ -41,6 +41,10 @@ export class Charge {
   @Column({ name: 'amount_cents', type: 'integer' })
   amountCents!: number;
 
+  /** Propina incluida en `amountCents` (el total que se cobra en pey). */
+  @Column({ name: 'tip_cents', type: 'integer', default: 0 })
+  tipCents!: number;
+
   /** Concepto que escribió el vendedor (sin el nombre del negocio). */
   @Column({ type: 'varchar', length: 40, nullable: true })
   concept!: string | null;

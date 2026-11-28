@@ -18,6 +18,8 @@ export async function createCharge(
     method: field(form, 'method'),
     phone: field(form, 'phone'),
     amount: field(form, 'amount'),
+    tipOption: field(form, 'tipOption'),
+    tip: field(form, 'tip'),
     concept: field(form, 'concept'),
   };
   const parsed = parseNewChargeForm(form);

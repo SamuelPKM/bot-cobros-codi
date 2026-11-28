@@ -13,6 +13,7 @@ export interface DayStatusRow {
   status: string;
   count: number | string;
   cents: number | string;
+  tips?: number | string;
 }
 
 export interface MethodRow {

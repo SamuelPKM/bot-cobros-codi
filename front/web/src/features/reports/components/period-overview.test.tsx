@@ -13,7 +13,7 @@ const overview: ReportOverview = {
   days: 7,
   from: '2026-11-18',
   to: '2026-11-24',
-  paid: { count: 4, amount: 400 },
+  paid: { count: 4, amount: 400, tips: 0 },
   previousPaidAmount: 320,
   paidChange: 0.25,
   averageTicket: 100,
@@ -45,6 +45,11 @@ describe('PeriodOverview', () => {
     expect(within(screen.getByRole('group', { name: 'Tasa de pago' })).getByText(/80\s?%/)).toBeInTheDocument();
   });
 
+  it('con propinas, la tarjeta Cobrado dice cuánto incluye', () => {
+    render(<PeriodOverview overview={{ ...overview, paid: { count: 4, amount: 400, tips: 30 } }} />);
+    expect(within(screen.getByRole('group', { name: 'Cobrado' })).getByText('Incluye $30.00 de propina')).toBeInTheDocument();
+  });
+
   it('marca el periodo elegido y enlaza los otros', () => {
     render(<PeriodOverview overview={overview} />);
     expect(screen.getByRole('link', { name: '7 días' })).toHaveAttribute('aria-current', 'page');
@@ -68,7 +73,7 @@ describe('PeriodOverview', () => {
       <PeriodOverview
         overview={{
           ...overview,
-          paid: { count: 0, amount: 0 },
+          paid: { count: 0, amount: 0, tips: 0 },
           paidChange: null,
           averageTicket: null,
           paymentRate: null,

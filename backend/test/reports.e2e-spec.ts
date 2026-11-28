@@ -76,6 +76,69 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
     );
   }
 
+  describe('propinas', () => {
+    /** Ana: 100 + 15 de propina pagado; Leo: 30 pagado sin propina; Ana: 50 + 5 pendiente. */
+    async function seedTips() {
+      await http
+        .post('/charges')
+        .set('Authorization', `Bearer ${ana}`)
+        .send({ method: 'qr', amount: 100, tip: 15 })
+        .expect(201);
+      await qrCharge(leo, 30);
+      await http
+        .post('/charges')
+        .set('Authorization', `Bearer ${ana}`)
+        .send({ method: 'qr', amount: 50, tip: 5 })
+        .expect(201);
+      await setStatus(1, 'paid');
+      await setStatus(2, 'paid');
+      await db.query(
+        `UPDATE charges SET paid_via = 'qr' WHERE status = 'paid'`,
+      );
+    }
+
+    it('today: paid.amount es el total y paid.tips la suma de propinas', async () => {
+      await seedTips();
+      const res = await http
+        .get('/reports/today')
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+      expect(res.body.paid).toEqual({ count: 2, amount: 145, tips: 15 });
+      expect(res.body.pending).toEqual({ count: 1, amount: 55 });
+      const byName = Object.fromEntries(
+        res.body.byPerson.map((p: { name: string }) => [p.name, p]),
+      );
+      expect(byName.Ana).toMatchObject({ paidAmount: 115, paidTips: 15 });
+      expect(byName.Leo).toMatchObject({ paidAmount: 30, paidTips: 0 });
+    });
+
+    it('overview: paid.tips', async () => {
+      await seedTips();
+      const res = await http
+        .get('/reports/overview')
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+      expect(res.body.paid).toEqual({ count: 2, amount: 145, tips: 15 });
+    });
+
+    it('CSV: columnas cobro, propina y total', async () => {
+      await seedTips();
+      const res = await http
+        .get('/reports/charges.csv')
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+      const lines = res.text
+        .replace(/^\uFEFF/, '')
+        .trim()
+        .split('\r\n');
+      expect(lines[0]).toBe(
+        'id,fecha,vendedor,celular,cobro,propina,total,concepto,estado,pagado_por,pagado_el',
+      );
+      expect(lines[1]).toMatch(/,Ana,,100\.00,15\.00,115\.00,,paid,qr,/);
+      expect(lines[2]).toMatch(/,Leo,,30\.00,0\.00,30\.00,,paid,qr,/);
+    });
+  });
+
   describe('GET /reports/today', () => {
     it('el admin ve los totales del negocio y el desglose por persona', async () => {
       await seedDay();
@@ -85,7 +148,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
         .expect(200);
       expect(res.body).toEqual({
         date: todayInMexico(),
-        paid: { count: 2, amount: 130 },
+        paid: { count: 2, amount: 130, tips: 0 },
         pending: { count: 1, amount: 50 },
         expired: { count: 1 },
         byPerson: [
@@ -95,6 +158,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
             role: 'seller',
             paidCount: 1,
             paidAmount: 100,
+            paidTips: 0,
             pendingCount: 1,
           },
           {
@@ -103,6 +167,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
             role: 'seller',
             paidCount: 1,
             paidAmount: 30,
+            paidTips: 0,
             pendingCount: 0,
           },
           {
@@ -111,6 +176,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
             role: 'admin',
             paidCount: 0,
             paidAmount: 0,
+            paidTips: 0,
             pendingCount: 0,
           },
         ],
@@ -124,7 +190,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
         .set('Authorization', `Bearer ${ana}`)
         .expect(200);
       expect(res.body).toMatchObject({
-        paid: { count: 1, amount: 100 },
+        paid: { count: 1, amount: 100, tips: 0 },
         pending: { count: 1, amount: 50 },
         expired: { count: 0 },
         byPerson: null,
@@ -139,7 +205,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
         .get('/reports/today')
         .set('Authorization', `Bearer ${otro}`)
         .expect(200);
-      expect(res.body.paid).toEqual({ count: 0, amount: 0 });
+      expect(res.body.paid).toEqual({ count: 0, amount: 0, tips: 0 });
     });
 
     it('exige sesión', async () => {
@@ -172,7 +238,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
         businessName: 'Tacos Ana',
         days: 7,
         to: todayInMexico(),
-        paid: { count: 2, amount: 130 },
+        paid: { count: 2, amount: 130, tips: 0 },
         previousPaidAmount: 50,
         paidChange: 1.6,
         averageTicket: 65,
@@ -204,7 +270,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
         businessName: 'Tacos Ana',
         days: 30,
         // 1 de hoy y el de hace 8 días: ya entra en 30 días.
-        paid: { count: 2, amount: 150 },
+        paid: { count: 2, amount: 150, tips: 0 },
         previousPaidAmount: 0,
         paidChange: null,
       });
@@ -217,7 +283,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
         .set('Authorization', `Bearer ${admin}`)
         .expect(200);
       expect(res.body).toMatchObject({
-        paid: { count: 0, amount: 0 },
+        paid: { count: 0, amount: 0, tips: 0 },
         averageTicket: null,
         paymentRate: null,
         paidChange: null,
@@ -254,7 +320,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
         .trim()
         .split('\r\n');
       expect(lines[0]).toBe(
-        'id,fecha,vendedor,celular,monto,concepto,estado,pagado_por,pagado_el',
+        'id,fecha,vendedor,celular,cobro,propina,total,concepto,estado,pagado_por,pagado_el',
       );
       expect(lines.slice(1).map((l) => l.split(',')[0])).toEqual([
         '1',
@@ -263,7 +329,7 @@ describe('Reportes: resumen del día y CSV (e2e)', () => {
         '4',
       ]);
       expect(lines[1]).toMatch(
-        /^1,\d{4}-\d{2}-\d{2} \d{2}:\d{2},Ana,,100\.00,,paid,,/,
+        /^1,\d{4}-\d{2}-\d{2} \d{2}:\d{2},Ana,,100\.00,0.00,100.00,,paid,,/,
       );
     });
 

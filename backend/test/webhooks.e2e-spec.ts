@@ -204,6 +204,40 @@ describe('Webhook de pey: pagos (e2e)', () => {
       expect((await getCharge()).status).toBe('pending');
     });
 
+    it('un cobro con propina se paga cuando pey confirma el total, no solo el subtotal', async () => {
+      await http
+        .post('/charges')
+        .set('Authorization', `Bearer ${ana}`)
+        .send({ phone: '5512345678', amount: 100, tip: 15 })
+        .expect(201);
+
+      pey.pay('TX1');
+      pey.transactions.get('TX1')!.amountBreakdown = { base: 100 };
+      const short = await deliver(pushPaid('TX1', 100)).expect(200);
+      expect(short.body.result).toBe('amount_mismatch');
+      expect((await getCharge()).status).toBe('pending');
+
+      pey.pay('TX1');
+      const ok = await deliver(pushPaid('TX1', 115)).expect(200);
+      expect(ok.body.result).toBe('paid');
+      expect(await getCharge()).toMatchObject({
+        status: 'paid',
+        amount: 115,
+        tip: 15,
+      });
+    });
+
+    it('un QR con propina se paga con el total', async () => {
+      await http
+        .post('/charges')
+        .set('Authorization', `Bearer ${ana}`)
+        .send({ method: 'qr', amount: 100, tip: 15 })
+        .expect(201);
+      const transactionId = pey.payQr('IDC1');
+      const res = await deliver(qrPaid('IDC1', transactionId, 115)).expect(200);
+      expect(res.body.result).toBe('paid');
+    });
+
     it('registra el pago aunque el cobro ya hubiera expirado (el dinero sí llegó)', async () => {
       await newCharge();
       await app.get(DataSource).query(`UPDATE charges SET status = 'expired'`);

@@ -7,13 +7,15 @@ export interface PersonSummary {
   role: Role;
   paidCount: number;
   paidAmount: number;
+  paidTips: number;
   pendingCount: number;
 }
 
 export interface DailySummary {
   /** YYYY-MM-DD en la Ciudad de México. */
   date: string;
-  paid: { count: number; amount: number };
+  /** `amount` es el total, propinas incluidas. */
+  paid: { count: number; amount: number; tips: number };
   pending: { count: number; amount: number };
   expired: { count: number };
   /** Solo el admin recibe el desglose; null para un vendedor. */

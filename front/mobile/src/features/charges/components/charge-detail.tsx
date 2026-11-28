@@ -47,6 +47,11 @@ export function ChargeDetail({ charge, onFallback }: ChargeDetailProps) {
       <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <ChargeStatusBadge status={charge.status} />
         <Text style={[styles.amount, { color: palette.text }]}>{formatMoney(charge.amount)}</Text>
+        {charge.tip > 0 ? (
+          <Text style={[styles.line, { color: palette.muted }]}>
+            {`Cobro ${formatMoney(charge.subtotal)} · Propina ${formatMoney(charge.tip)}`}
+          </Text>
+        ) : null}
         {charge.concept ? <Text style={[styles.line, { color: palette.text }]}>{charge.concept}</Text> : null}
         <Text style={[styles.line, { color: palette.muted }]}>
           {[charge.payerPhone ? formatPhone(charge.payerPhone) : null, charge.seller.name, formatDateTime(charge.createdAt)]

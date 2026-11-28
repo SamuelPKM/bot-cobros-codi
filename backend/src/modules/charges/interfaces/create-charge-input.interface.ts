@@ -5,7 +5,10 @@ export interface CreateChargeInput {
   method: ChargeMethod;
   /** 10 dígitos. Obligatorio para push; opcional para QR y liga. */
   payerPhone: string | null;
+  /** Total que se cobra (cobro + propina). */
   amountCents: number;
+  /** Propina incluida en `amountCents`; 0 si no hay. */
+  tipCents?: number;
   concept: string | null;
 }
 

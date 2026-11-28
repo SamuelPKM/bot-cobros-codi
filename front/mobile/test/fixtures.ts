@@ -30,6 +30,8 @@ export const aCharge = (overrides: Partial<PublicCharge> = {}): PublicCharge => 
   id: 7,
   status: 'pending',
   amount: 150,
+  subtotal: 150,
+  tip: 0,
   concept: 'corte',
   payerPhone: '5512345678',
   seller: { id: 7, name: 'Ana Prueba' },
@@ -45,7 +47,7 @@ export const aCharge = (overrides: Partial<PublicCharge> = {}): PublicCharge => 
 /** Resumen del día ficticio. */
 export const aSummary = (overrides: Partial<DailySummary> = {}): DailySummary => ({
   date: '2026-12-01',
-  paid: { count: 3, amount: 450 },
+  paid: { count: 3, amount: 450, tips: 0 },
   pending: { count: 1, amount: 80 },
   expired: { count: 2 },
   byPerson: null,

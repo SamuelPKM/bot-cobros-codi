@@ -15,11 +15,12 @@ export function ChargesTable({ charges, showSeller }: ChargesTableProps) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[36rem] text-left text-sm">
+      <table className="w-full min-w-[40rem] text-left text-sm">
         <thead className="border-b border-zinc-200 text-zinc-600">
           <tr>
             <th className="py-2 pr-3 font-medium">Estado</th>
-            <th className="py-2 pr-3 font-medium">Monto</th>
+            <th className="py-2 pr-3 font-medium">Total</th>
+            <th className="py-2 pr-3 font-medium">Propina</th>
             <th className="py-2 pr-3 font-medium">Cliente</th>
             <th className="py-2 pr-3 font-medium">Concepto</th>
             {showSeller && <th className="py-2 pr-3 font-medium">Cobró</th>}
@@ -36,6 +37,7 @@ export function ChargesTable({ charges, showSeller }: ChargesTableProps) {
                 <ChargeStatusBadge status={charge.status} />
               </td>
               <td className="py-2 pr-3 font-medium tabular-nums">{formatMoney(charge.amount)}</td>
+              <td className="py-2 pr-3 tabular-nums">{charge.tip > 0 ? formatMoney(charge.tip) : '—'}</td>
               <td className="py-2 pr-3 tabular-nums">{formatPhone(charge.payerPhone)}</td>
               <td className="py-2 pr-3">{charge.concept ?? '—'}</td>
               {showSeller && <td className="py-2 pr-3">{charge.seller.name}</td>}

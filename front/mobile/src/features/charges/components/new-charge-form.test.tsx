@@ -75,4 +75,45 @@ describe('NewChargeForm', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     finish();
   });
+
+  it('propina: porcentaje con total en vivo y se manda en tip', async () => {
+    const onSubmit = jest.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    await render(<NewChargeForm onSubmit={onSubmit} />);
+
+    expect(screen.getByLabelText('Propina')).toHaveProp('accessibilityRole', 'radiogroup');
+    expect(screen.getByRole('radio', { name: 'Sin propina' })).toBeChecked();
+    await user.press(screen.getByRole('radio', { name: 'QR' }));
+    await user.type(screen.getByLabelText('Monto'), '100');
+    expect(screen.getByText('Total a cobrar: $100.00')).toBeOnTheScreen();
+    expect(screen.queryByText(/propina \$/)).not.toBeOnTheScreen();
+
+    await user.press(screen.getByRole('radio', { name: '15%' }));
+    expect(screen.getByText('Total a cobrar: $115.00')).toBeOnTheScreen();
+    expect(screen.getByText('Cobro $100.00 + propina $15.00')).toBeOnTheScreen();
+    await user.press(screen.getByRole('button', { name: 'Cobrar' }));
+
+    expect(onSubmit).toHaveBeenCalledWith({ method: 'qr', amount: 100, tip: 15 });
+  });
+
+  it('propina: otra pide los pesos y valida', async () => {
+    const onSubmit = jest.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    await render(<NewChargeForm onSubmit={onSubmit} />);
+
+    await user.press(screen.getByRole('radio', { name: 'QR' }));
+    await user.type(screen.getByLabelText('Monto'), '100');
+    expect(screen.queryByLabelText('Propina (pesos)')).not.toBeOnTheScreen();
+    await user.press(screen.getByRole('radio', { name: 'Otra' }));
+    await user.type(screen.getByLabelText('Propina (pesos)'), '200');
+    await user.press(screen.getByRole('button', { name: 'Cobrar' }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText('La propina no puede ser mayor que el cobro')).toBeOnTheScreen();
+
+    await user.clear(screen.getByLabelText('Propina (pesos)'));
+    await user.type(screen.getByLabelText('Propina (pesos)'), '12.5');
+    expect(screen.getByText('Total a cobrar: $112.50')).toBeOnTheScreen();
+    await user.press(screen.getByRole('button', { name: 'Cobrar' }));
+    expect(onSubmit).toHaveBeenCalledWith({ method: 'qr', amount: 100, tip: 12.5 });
+  });
 });

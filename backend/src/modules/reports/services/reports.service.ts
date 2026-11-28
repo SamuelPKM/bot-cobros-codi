@@ -31,6 +31,7 @@ interface StatusRow {
   status: string;
   count: string;
   cents: string;
+  tips: string;
 }
 
 const DAY_MS = 86_400_000;
@@ -50,7 +51,8 @@ export class ReportsService {
   async today(user: User): Promise<DailySummary> {
     const date = todayInMexico();
     const rows = await this.dataSource.query<StatusRow[]>(
-      `SELECT seller_id, status, count(*) AS count, coalesce(sum(amount_cents), 0) AS cents
+      `SELECT seller_id, status, count(*) AS count, coalesce(sum(amount_cents), 0) AS cents,
+              coalesce(sum(tip_cents), 0) AS tips
          FROM charges
         WHERE business_id = $1
           AND ($2::int IS NULL OR seller_id = $2)
@@ -59,7 +61,7 @@ export class ReportsService {
       [user.businessId, sellerFilter(user), REPORT_TIME_ZONE, date],
     );
 
-    const total = (status: string, field: 'count' | 'cents') =>
+    const total = (status: string, field: 'count' | 'cents' | 'tips') =>
       rows
         .filter((r) => r.status === status)
         .reduce((sum, r) => sum + Number(r[field]), 0);
@@ -69,6 +71,7 @@ export class ReportsService {
       paid: {
         count: total('paid', 'count'),
         amount: centsToPesos(total('paid', 'cents')),
+        tips: centsToPesos(total('paid', 'tips')),
       },
       pending: {
         count: total('pending', 'count'),
@@ -96,7 +99,8 @@ export class ReportsService {
     const [byDay, previous, methods, hours, business] = await Promise.all([
       this.dataSource.query<DayStatusRow[]>(
         `SELECT to_char((created_at AT TIME ZONE $3)::date, 'YYYY-MM-DD') AS day,
-                status, count(*) AS count, coalesce(sum(amount_cents), 0) AS cents
+                status, count(*) AS count, coalesce(sum(amount_cents), 0) AS cents,
+                coalesce(sum(tip_cents), 0) AS tips
            FROM charges WHERE ${where}
           GROUP BY 1, 2`,
         [...scope, range.from, range.to],
@@ -129,6 +133,9 @@ export class ReportsService {
     const paidCents = byDay
       .filter((r) => r.status === 'paid')
       .reduce((sum, r) => sum + Number(r.cents), 0);
+    const paidTips = byDay
+      .filter((r) => r.status === 'paid')
+      .reduce((sum, r) => sum + Number(r.tips ?? 0), 0);
     const previousCents = Number(previous[0]?.cents ?? 0);
 
     return {
@@ -137,7 +144,11 @@ export class ReportsService {
       days,
       from: range.from,
       to: range.to,
-      paid: { count: paidCount, amount: centsToPesos(paidCents) },
+      paid: {
+        count: paidCount,
+        amount: centsToPesos(paidCents),
+        tips: centsToPesos(paidTips),
+      },
       previousPaidAmount: centsToPesos(previousCents),
       paidChange: change(paidCents, previousCents),
       averageTicket:
@@ -164,6 +175,7 @@ export class ReportsService {
         vendedor: string;
         payer_phone: string | null;
         amount_cents: number;
+        tip_cents: number;
         concept: string | null;
         status: string;
         paid_via: string | null;
@@ -172,7 +184,7 @@ export class ReportsService {
     >(
       `SELECT c.id,
               to_char(c.created_at AT TIME ZONE $3, 'YYYY-MM-DD HH24:MI') AS fecha,
-              u.name AS vendedor, c.payer_phone, c.amount_cents, c.concept, c.status, c.paid_via,
+              u.name AS vendedor, c.payer_phone, c.amount_cents, c.tip_cents, c.concept, c.status, c.paid_via,
               to_char(c.paid_at AT TIME ZONE $3, 'YYYY-MM-DD HH24:MI') AS paid_at
          FROM charges c JOIN users u ON u.id = c.seller_id
         WHERE c.business_id = $1
@@ -195,6 +207,8 @@ export class ReportsService {
         r.fecha,
         r.vendedor,
         r.payer_phone,
+        centsToPesos(r.amount_cents - r.tip_cents).toFixed(2),
+        centsToPesos(r.tip_cents).toFixed(2),
         centsToPesos(r.amount_cents).toFixed(2),
         r.concept,
         r.status,
@@ -215,7 +229,7 @@ export class ReportsService {
       .filter((u) => u.active || rows.some((r) => r.seller_id === u.id))
       .map((u) => {
         const mine = rows.filter((r) => r.seller_id === u.id);
-        const of = (status: string, field: 'count' | 'cents') =>
+        const of = (status: string, field: 'count' | 'cents' | 'tips') =>
           mine
             .filter((r) => r.status === status)
             .reduce((sum, r) => sum + Number(r[field]), 0);
@@ -225,6 +239,7 @@ export class ReportsService {
           role: u.role,
           paidCount: of('paid', 'count'),
           paidAmount: centsToPesos(of('paid', 'cents')),
+          paidTips: centsToPesos(of('paid', 'tips')),
           pendingCount: of('pending', 'count'),
         };
       })

@@ -179,6 +179,23 @@ describe('Liga de pago y cobros sin teléfono (e2e)', () => {
       ]);
     });
 
+    it('una liga con propina nuestra se paga cuando pey confirma el total', async () => {
+      await charge({ method: 'link', amount: 100, tip: 15 }).expect(201);
+      expect(pey.links[0].amount).toBe(115);
+      pey.payLink('LINK1');
+      const res = await deliver({
+        type: 'payment_link.status_updated',
+        paymentLinkId: 'LINK1',
+        status: 'paid',
+      }).expect(200);
+      expect(res.body.result).toBe('paid');
+      expect(await getCharge()).toMatchObject({
+        status: 'paid',
+        amount: 115,
+        tip: 15,
+      });
+    });
+
     it('si pey todavía no la tiene pagada responde 500 para que reintente', async () => {
       await charge({ method: 'link', amount: 150 }).expect(201);
       await deliver({

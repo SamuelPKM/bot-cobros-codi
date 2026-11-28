@@ -17,6 +17,19 @@ const attempt = (over: Partial<PublicAttempt>): PublicAttempt => ({
 });
 
 describe('ChargeDetail', () => {
+  it('con propina: el monto grande es el total y desglosa', async () => {
+    await render(
+      <ChargeDetail charge={aCharge({ amount: 115, subtotal: 100, tip: 15 })} onFallback={jest.fn()} />,
+    );
+    expect(screen.getByText('$115.00')).toBeOnTheScreen();
+    expect(screen.getByText('Cobro $100.00 · Propina $15.00')).toBeOnTheScreen();
+  });
+
+  it('sin propina no desglosa', async () => {
+    await render(<ChargeDetail charge={aCharge()} onFallback={jest.fn()} />);
+    expect(screen.queryByText(/Propina/)).not.toBeOnTheScreen();
+  });
+
   it('pendiente: monto, estado y plan B', async () => {
     await render(<ChargeDetail charge={aCharge()} onFallback={jest.fn()} />);
     expect(screen.getByText('$150.00')).toBeOnTheScreen();

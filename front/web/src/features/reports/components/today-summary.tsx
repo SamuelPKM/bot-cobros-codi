@@ -72,7 +72,11 @@ export function TodaySummary({ summary }: { summary: DailySummary }) {
         <Stat
           label="Cobrado hoy"
           value={formatMoney(summary.paid.amount)}
-          detail={plural(summary.paid.count)}
+          detail={
+            summary.paid.tips > 0
+              ? `${plural(summary.paid.count)} · ${formatMoney(summary.paid.tips)} de propina`
+              : plural(summary.paid.count)
+          }
           icon="paid"
           accent="bg-emerald-50 text-emerald-700"
         />
@@ -97,6 +101,7 @@ export function TodaySummary({ summary }: { summary: DailySummary }) {
               <tr>
                 <th className="px-4 py-2.5 font-medium">Persona</th>
                 <th className="px-4 py-2.5 font-medium">Cobrado</th>
+                <th className="px-4 py-2.5 font-medium">Propinas</th>
                 <th className="px-4 py-2.5 font-medium">Pagados</th>
                 <th className="px-4 py-2.5 font-medium">Pendientes</th>
               </tr>
@@ -116,6 +121,9 @@ export function TodaySummary({ summary }: { summary: DailySummary }) {
                     </span>
                   </td>
                   <td className="px-4 py-2.5 tabular-nums">{formatMoney(person.paidAmount)}</td>
+                  <td className="px-4 py-2.5 tabular-nums">
+                    {person.paidTips > 0 ? formatMoney(person.paidTips) : '—'}
+                  </td>
                   <td className="px-4 py-2.5 tabular-nums">{person.paidCount}</td>
                   <td className="px-4 py-2.5 tabular-nums">{person.pendingCount}</td>
                 </tr>

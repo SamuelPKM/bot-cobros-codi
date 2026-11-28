@@ -7,6 +7,7 @@ import {
   Matches,
   Max,
   MaxLength,
+  Min,
   ValidateIf,
 } from 'class-validator';
 import { MAX_AMOUNT } from '../../pey/constants/pey.constants';
@@ -40,6 +41,18 @@ export class CreateChargeDto {
   @IsPositive({ message: 'El monto debe ser mayor a 0' })
   @Max(MAX_AMOUNT, { message: 'El monto máximo por cobro es de $1,000,000' })
   amount!: number;
+
+  /** Propina en pesos (opcional). Se suma al cobro: a pey va el total. */
+  @IsOptional()
+  @IsNumber(
+    { maxDecimalPlaces: 2, allowNaN: false, allowInfinity: false },
+    { message: 'La propina admite máximo 2 decimales' },
+  )
+  @Min(0, { message: 'La propina no puede ser negativa' })
+  @Max(MAX_AMOUNT, {
+    message: 'El total con propina no puede pasar de $1,000,000',
+  })
+  tip?: number;
 
   @IsOptional()
   @IsString()

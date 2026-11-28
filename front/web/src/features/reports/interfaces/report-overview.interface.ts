@@ -20,7 +20,8 @@ export interface ReportOverview {
   days: number;
   from: string;
   to: string;
-  paid: { count: number; amount: number };
+  /** amount incluye la propina. */
+  paid: { count: number; amount: number; tips: number };
   previousPaidAmount: number;
   /** 0.25 = +25% contra el periodo anterior; null si antes no hubo cobros pagados. */
   paidChange: number | null;

@@ -177,6 +177,93 @@ describe('Cobros: push con QR de respaldo (e2e)', () => {
     });
   });
 
+  describe('propina', () => {
+    it('push: a pey va el total y la respuesta separa cobro y propina', async () => {
+      const res = await charge(leo, {
+        phone: '5512345678',
+        amount: 100,
+        tip: 15,
+      }).expect(201);
+      expect(res.body.charge).toMatchObject({
+        amount: 115,
+        subtotal: 100,
+        tip: 15,
+      });
+      expect(pey.pushes[0].amount).toBe(115);
+    });
+
+    it('QR y liga mandan el total a pey', async () => {
+      const qr = await charge(leo, {
+        method: 'qr',
+        amount: 100,
+        tip: 15,
+      }).expect(201);
+      expect(qr.body.charge).toMatchObject({
+        amount: 115,
+        subtotal: 100,
+        tip: 15,
+      });
+      expect(pey.qrs[0].amount).toBe(115);
+
+      const link = await charge(leo, {
+        method: 'link',
+        amount: 100,
+        tip: 15,
+      }).expect(201);
+      expect(link.body.charge).toMatchObject({
+        amount: 115,
+        subtotal: 100,
+        tip: 15,
+      });
+      expect(pey.links[0].amount).toBe(115);
+    });
+
+    it('sin propina: tip 0 y subtotal igual al monto', async () => {
+      const res = await charge(leo, {
+        phone: '5512345678',
+        amount: 80.5,
+      }).expect(201);
+      expect(res.body.charge).toMatchObject({
+        amount: 80.5,
+        subtotal: 80.5,
+        tip: 0,
+      });
+      const list = await http
+        .get('/charges')
+        .set('Authorization', `Bearer ${leo}`)
+        .expect(200);
+      expect(list.body.charges[0]).toMatchObject({ subtotal: 80.5, tip: 0 });
+    });
+
+    it.each([
+      [{ amount: 100, tip: 100.01 }, 422, /mayor que el cobro/],
+      [{ amount: 100, tip: -1 }, 400, /no puede ser negativa/],
+      [{ amount: 100, tip: 1.234 }, 400, /máximo 2 decimales/],
+      [{ amount: 999_999, tip: 2 }, 422, /\$1,000,000/],
+    ])('rechaza %j sin llamar a pey', async (body, status, message) => {
+      const res = await charge(leo, { phone: '5512345678', ...body }).expect(
+        status,
+      );
+      expect(JSON.stringify(res.body.message)).toMatch(message);
+      await charge(leo, { method: 'qr', ...body }).expect(status);
+      expect(pey.pushes).toHaveLength(0);
+      expect(pey.qrs).toHaveLength(0);
+    });
+
+    it('el tope del vendedor se aplica al total con propina', async () => {
+      const res = await charge(ana, {
+        phone: '5512345678',
+        amount: 450,
+        tip: 60,
+      }).expect(422);
+      expect(res.body.message).toMatch(/500/);
+      expect(pey.pushes).toHaveLength(0);
+      await charge(ana, { phone: '5512345678', amount: 450, tip: 50 }).expect(
+        201,
+      );
+    });
+  });
+
   describe('POST /charges/:id/qr (plan B)', () => {
     it('genera un QR del mismo cobro con 15 minutos de vigencia', async () => {
       await charge(ana, {

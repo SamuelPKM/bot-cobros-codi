@@ -8,6 +8,8 @@ export interface PersonSummary {
   paidCount: number;
   /** En pesos. */
   paidAmount: number;
+  /** Propinas incluidas en `paidAmount`. En pesos. */
+  paidTips: number;
   pendingCount: number;
 }
 
@@ -15,7 +17,8 @@ export interface PersonSummary {
 export interface DailySummary {
   /** YYYY-MM-DD en la Ciudad de México. */
   date: string;
-  paid: { count: number; amount: number };
+  /** `amount` es el total cobrado; `tips` las propinas incluidas en él. */
+  paid: { count: number; amount: number; tips: number };
   pending: { count: number; amount: number };
   expired: { count: number };
   /** Solo para el admin: cada persona del equipo. null para un vendedor. */
@@ -47,7 +50,7 @@ export interface ReportOverview {
   /** YYYY-MM-DD, ambos incluidos, en la Ciudad de México. */
   from: string;
   to: string;
-  paid: { count: number; amount: number };
+  paid: { count: number; amount: number; tips: number };
   /** Lo cobrado en los `days` días anteriores a `from`. */
   previousPaidAmount: number;
   /** Cambio contra el periodo anterior (0.25 = +25%); null si antes no hubo cobros pagados. */
