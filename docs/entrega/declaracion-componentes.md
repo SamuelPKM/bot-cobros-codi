@@ -27,6 +27,7 @@ Desde el 14 de noviembre de 2026:
 - Motor de conversación compartido por WhatsApp y la demo; vinculación de WhatsApp con código, QR como imagen y aviso de pago.
 - Demo web pública con límites de uso y una sesión aislada por visitante.
 - Web nueva en Next.js: registro, entrar, panel, nuevo cobro con plan B y pago en vivo, equipo, ajustes, invitaciones, demo y páginas de regreso del pago.
+- App móvil en Expo: entrar, panel del día, nuevo cobro con plan B, pago en vivo y aviso push que abre el cobro.
 - Pruebas automáticas de todo lo anterior (unitarias y de extremo a extremo contra Postgres).
 - Instalación en AWS: servidor EC2 con la API y la web en Docker detrás de Caddy, base de datos en Amazon RDS (Postgres), configuración cifrada en SSM Parameter Store y guiones para crear, actualizar y borrar todo.
 - Identidad visual: logo de Cóbrale (dibujado en SVG por el equipo), pantallas de entrada y registro con ilustración de un cobro CoDi, y estilo de botones y campos.
@@ -48,6 +49,8 @@ Desde el 14 de noviembre de 2026:
 | [helmet](https://helmetjs.github.io) | Headers de seguridad HTTP | MIT |
 | [Next.js](https://nextjs.org) 16 y [React](https://react.dev) 19 | Web | MIT |
 | [Tailwind CSS](https://tailwindcss.com) 4 | Estilos de la web | MIT |
+| [Expo](https://expo.dev) SDK 58, [React Native](https://reactnative.dev) y Expo Router | App móvil | MIT |
+| expo-secure-store, expo-notifications y [react-native-svg](https://github.com/software-mansion/react-native-svg) | Sesión en el llavero del teléfono, avisos de pago y dibujo del QR en la app | MIT |
 | [standardwebhooks](https://www.npmjs.com/package/standardwebhooks) | Verificar la firma de los webhooks de pey | MIT |
 | [qrcode](https://www.npmjs.com/package/qrcode) | Dibujar la imagen del QR CoDi | MIT |
 | [Jest](https://jestjs.io), [Vitest](https://vitest.dev) y [Testing Library](https://testing-library.com) | Pruebas automáticas | MIT |
@@ -58,7 +61,7 @@ Desde el 14 de noviembre de 2026:
 | [Docker](https://www.docker.com) | Contenedores de la API, la web y el proxy | Apache-2.0 |
 | [Caddy](https://caddyserver.com) | Proxy con HTTPS automático (Let's Encrypt) | Apache-2.0 |
 
-Las dependencias que estas librerías traen consigo están en `backend/package-lock.json` y `front/web/package-lock.json`.
+Las dependencias que estas librerías traen consigo están en `backend/package-lock.json`, `front/web/package-lock.json` y `front/mobile/package-lock.json`.
 
 No se usaron diseños, imágenes, contenidos ni productos de terceros además de los listados: el logo y las ilustraciones están hechos en código por el equipo, sin fotos ni imágenes de bancos de imágenes. El proyecto no se ha presentado en otros concursos.
 

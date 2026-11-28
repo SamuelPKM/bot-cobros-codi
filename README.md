@@ -9,7 +9,7 @@ No es un producto oficial de pey ni de Banco de México.
 | Carpeta | Qué es |
 |---|---|
 | [backend/](backend/) | API en NestJS + TypeORM + PostgreSQL. Ver [backend/README.md](backend/README.md) |
-| [front/](front/) | Una carpeta por aplicación de front: [front/web](front/web/) (Next.js) y, más adelante, front/mobile (Expo) |
+| [front/](front/) | Una carpeta por aplicación de front: [front/web](front/web/) (Next.js) y [front/mobile](front/mobile/) (Expo) |
 | [docs/](docs/) | [Plan de la migración](docs/plan-nest-next.md) y documentos de entrega del hackatón |
 | [deploy/aws/](deploy/aws/) | Guiones para instalar y operar la API y la web en AWS (ver [docs/deploy-aws.md](docs/deploy-aws.md)) |
 
@@ -34,5 +34,7 @@ npm install
 cp .env.example .env.local
 npm run dev
 ```
+
+App móvil (Expo Go, Node 22.13+): ver [front/mobile](front/mobile/README.md).
 
 Deploy en AWS (una instancia EC2 con la API y la web en Docker, HTTPS automático, todo desde CloudShell) y primer cobro real de $0.01: [docs/deploy-aws.md](docs/deploy-aws.md).
